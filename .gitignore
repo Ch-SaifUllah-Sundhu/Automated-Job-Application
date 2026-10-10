@@ -7,9 +7,3 @@ node_modules/
 .DS_Store
 __pycache__/
 venv/
-PRD.md
-SRS.md
-Architecture.md
-UI_UX.md
-Development_Plan.md
-Project_Tracker.md
