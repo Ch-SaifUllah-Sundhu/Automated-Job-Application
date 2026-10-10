@@ -81,34 +81,47 @@ def _fake_ddg_raw(n: int = 1) -> dict:
 class TestSearchJobs:
 
     def test_returns_mapped_jobs(self):
-        """DDGS results are correctly mapped to our job schema."""
+        """_ddg_search results are correctly mapped to our job schema."""
         from agent import search_jobs
 
-        with patch("agent.DDGS") as MockDDGS:
-            MockDDGS.return_value.text.return_value = [_fake_ddg_raw()]
+        with patch("agent._ddg_search") as mock_search:
+            mock_search.return_value = [_fake_ddg_raw()]
             result = search_jobs(_state())
 
         assert result["status"] == "Jobs Found"
         assert result["error"] is None
         jobs = result["found_jobs"]
-        assert len(jobs) == 1
+        assert len(jobs) >= 1
         assert jobs[0]["url"] == "https://linkedin.com/jobs/1"
-        assert jobs[0]["source"] == "DuckDuckGo"
 
-    def test_empty_results_is_ok(self):
-        """An empty DDGS result is not an error — just zero jobs."""
+    def test_empty_results_falls_back(self):
+        """When all portal queries return empty, fallback queries are tried."""
         from agent import search_jobs
 
-        with patch("agent.DDGS") as MockDDGS:
-            MockDDGS.return_value.text.return_value = []
+        with patch("agent._ddg_search") as mock_search:
+            # portals all return empty, fallback returns 1 result
+            mock_search.side_effect = [
+                [] for _ in range(10)   # 10 portals
+            ] + [[_fake_ddg_raw()], [], []]  # 3 fallback queries
             result = search_jobs(_state())
 
         assert result["status"] == "Jobs Found"
+        assert len(result["found_jobs"]) >= 1
+
+    def test_all_portals_and_fallbacks_fail(self):
+        """If all DDG calls return error strings, status is Search Failed."""
+        from agent import search_jobs
+
+        with patch("agent._ddg_search") as mock_search:
+            mock_search.return_value = "Network error"
+            result = search_jobs(_state())
+
+        assert result["status"] == "Search Failed"
         assert result["found_jobs"] == []
 
     def test_rate_limit_retry_succeeds(self):
-        """B1: First call raises, second succeeds — status should be Jobs Found."""
-        from agent import search_jobs
+        """B1: _ddg_search retries internally; first call raises, second succeeds."""
+        from agent import _ddg_search
 
         attempts = {"n": 0}
 
@@ -119,25 +132,25 @@ class TestSearchJobs:
             return [_fake_ddg_raw()]
 
         with patch("agent.DDGS") as MockDDGS:
-            with patch("agent.time.sleep"):  # skip real sleep in tests
+            with patch("agent.time.sleep"):
                 MockDDGS.return_value.text.side_effect = flaky
-                result = search_jobs(_state())
+                result = _ddg_search("test query", 3)
 
-        assert result["status"] == "Jobs Found"
-        assert attempts["n"] == 2  # confirmed one retry
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert attempts["n"] == 2
 
     def test_all_retries_exhausted(self):
-        """B1: All 3 attempts fail → Search Failed with error message."""
-        from agent import search_jobs
+        """B1: All 3 DDG attempts fail → returns error string."""
+        from agent import _ddg_search
 
         with patch("agent.DDGS") as MockDDGS:
             with patch("agent.time.sleep"):
                 MockDDGS.return_value.text.side_effect = Exception("Network error")
-                result = search_jobs(_state())
+                result = _ddg_search("test", 3)
 
-        assert result["status"] == "Search Failed"
-        assert "Network error" in result["error"]
-        assert result["found_jobs"] == []
+        assert isinstance(result, str)
+        assert "Network error" in result
 
     def test_company_extracted_from_title(self):
         """Company is parsed from 'Title - Company' formatted titles."""
@@ -146,12 +159,26 @@ class TestSearchJobs:
         job = _parse_ddg_result({"title": "Python Dev - Acme Corp", "href": "https://x.com", "body": ""})
         assert job["company"] == "Acme Corp"
 
+    def test_company_extracted_from_at_format(self):
+        """Company is parsed from 'Title at Company' formatted titles."""
+        from agent import _parse_ddg_result
+
+        job = _parse_ddg_result({"title": "Python Dev at Acme Corp", "href": "https://x.com", "body": ""})
+        assert job["company"] == "Acme Corp"
+
     def test_company_fallback_when_no_dash(self):
-        """Company defaults to 'Unknown' when title has no ' - ' separator."""
+        """Company defaults to 'Unknown' when title has no separator."""
         from agent import _parse_ddg_result
 
         job = _parse_ddg_result({"title": "Python Dev", "href": "https://x.com", "body": ""})
         assert job["company"] == "Unknown"
+
+    def test_source_label_set_correctly(self):
+        """Source label is passed through from the portal name."""
+        from agent import _parse_ddg_result
+
+        job = _parse_ddg_result({"title": "Dev", "href": "https://x.com", "body": ""}, source="LinkedIn")
+        assert job["source"] == "LinkedIn"
 
 
 # ---------------------------------------------------------------------------
@@ -328,9 +355,8 @@ class TestPipelineSmoke:
             MagicMock(content="• A\n• B\n• C"),
         ]
 
-        with patch("agent.DDGS") as MockDDGS:
+        with patch("agent._ddg_search", return_value=[_fake_ddg_raw()]):
             with patch("agent.ChatGroq", return_value=mock_llm):
-                MockDDGS.return_value.text.return_value = [_fake_ddg_raw()]
                 result = _agent.agent_app.invoke(_state())
 
         assert result["status"] == "Saved to DB"

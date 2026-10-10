@@ -81,52 +81,145 @@ class AgentState(TypedDict):
 
 
 # ---------------------------------------------------------------------------
-# Node 1 — Search
+# Node 1 — Search  (multi-portal, multi-query, deduplication)
 # ---------------------------------------------------------------------------
-_SEARCH_SITES = "site:linkedin.com OR site:indeed.com OR site:greenhouse.io"
-_MAX_RESULTS = 5
-_MAX_RETRIES = 3
+
+# Job portals searched in order of popularity.
+# Split into separate queries because DuckDuckGo's multi-site OR is unreliable.
+_JOB_PORTALS: List[Dict[str, str]] = [
+    {"name": "LinkedIn",     "site": "linkedin.com/jobs"},
+    {"name": "Indeed",       "site": "indeed.com"},
+    {"name": "Glassdoor",    "site": "glassdoor.com/job"},
+    {"name": "Greenhouse",   "site": "greenhouse.io"},
+    {"name": "Lever",        "site": "jobs.lever.co"},
+    {"name": "Wellfound",    "site": "wellfound.com/jobs"},
+    {"name": "Remoteok",     "site": "remoteok.com"},
+    {"name": "We Work Remotely", "site": "weworkremotely.com"},
+    {"name": "Himalayas",    "site": "himalayas.app"},
+    {"name": "Workable",     "site": "apply.workable.com"},
+]
+
+_MAX_PER_PORTAL = 3    # results fetched per portal query
+_MAX_TOTAL      = 15   # cap on total jobs returned
+_MAX_RETRIES    = 3    # DDG retries per query
+_RETRY_DELAY    = 2    # seconds (doubles each retry)
 
 
 def search_jobs(state: AgentState) -> Dict[str, Any]:
     """
-    Search for jobs via DuckDuckGo (no API key required).
+    Search 10+ job portals via DuckDuckGo text search.
 
-    Retries up to 3× with exponential back-off to survive rate-limit spikes.
-    Returns at most ``_MAX_RESULTS`` jobs, or an empty list on total failure.
+    Strategy:
+    1. Run a site-specific query per portal (e.g. site:linkedin.com/jobs).
+    2. Deduplicate results by URL across all portals.
+    3. If total results < 3, run a fallback open query (no site filter).
+    4. Each DDG call retries up to 3× with exponential back-off.
+
+    Returns up to ``_MAX_TOTAL`` unique jobs.
     """
     keywords, location = state["keywords"], state["location"]
-    log.info("[Node 1] Searching: '%s' in '%s'", keywords, location)
+    log.info("[Node 1] Searching '%s' in '%s' across %d portals.",
+             keywords, location, len(_JOB_PORTALS))
 
-    query = f"{keywords} job openings in {location} {_SEARCH_SITES}"
+    seen_urls: set = set()
+    all_jobs: List[Dict[str, Any]] = []
     last_error: str = ""
 
+    # ── Pass 1: portal-specific queries ──────────────────────────────────
+    for portal in _JOB_PORTALS:
+        if len(all_jobs) >= _MAX_TOTAL:
+            break
+
+        query = (
+            f'{keywords} jobs {location} site:{portal["site"]}'
+        )
+        results = _ddg_search(query, _MAX_PER_PORTAL)
+
+        if isinstance(results, str):          # error string returned
+            last_error = results
+            log.warning("Portal '%s' failed: %s", portal["name"], results)
+            continue
+
+        new = 0
+        for r in results:
+            url = r.get("href", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                job = _parse_ddg_result(r, source=portal["name"])
+                all_jobs.append(job)
+                new += 1
+
+        log.info("  %-20s → %d new result(s)", portal["name"], new)
+        time.sleep(0.8)   # be polite between portal queries
+
+    # ── Pass 2: open fallback if portals returned too little ─────────────
+    if len(all_jobs) < 3:
+        log.info("Too few results (%d). Running open fallback query.", len(all_jobs))
+        fallback_queries = [
+            f"{keywords} job openings {location}",
+            f"{keywords} remote job hiring",
+            f"{keywords} developer job {location} apply",
+        ]
+        for fq in fallback_queries:
+            if len(all_jobs) >= _MAX_TOTAL:
+                break
+            results = _ddg_search(fq, _MAX_PER_PORTAL)
+            if isinstance(results, str):
+                last_error = results
+                continue
+            for r in results:
+                url = r.get("href", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    all_jobs.append(_parse_ddg_result(r, source="Web"))
+            time.sleep(0.8)
+
+    total = len(all_jobs)
+    log.info("Search complete. Total unique jobs: %d", total)
+
+    if total == 0:
+        return {
+            "found_jobs": [],
+            "status": "Search Failed",
+            "error": last_error or "No jobs found across all portals and fallback queries.",
+        }
+
+    return {"found_jobs": all_jobs[:_MAX_TOTAL], "status": "Jobs Found", "error": None}
+
+
+def _ddg_search(query: str, max_results: int) -> List[Dict[str, Any]] | str:
+    """
+    Run a single DuckDuckGo text search with retry + back-off.
+    Returns the result list on success, or an error string on total failure.
+    """
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            raw = DDGS().text(query, max_results=_MAX_RESULTS)
-            jobs = [_parse_ddg_result(r) for r in (raw or [])]
-            log.info("Found %d job(s).", len(jobs))
-            return {"found_jobs": jobs, "status": "Jobs Found", "error": None}
+            raw = DDGS().text(query, max_results=max_results)
+            return raw or []
         except Exception as exc:  # noqa: BLE001
-            last_error = str(exc)
-            log.warning("DuckDuckGo attempt %d/%d failed: %s", attempt, _MAX_RETRIES, exc)
             if attempt < _MAX_RETRIES:
-                time.sleep(2 ** attempt)  # 2s → 4s back-off
+                time.sleep(_RETRY_DELAY ** attempt)
+            else:
+                return str(exc)
+    return []
 
-    log.error("All DuckDuckGo retries exhausted.")
-    return {"found_jobs": [], "status": "Search Failed", "error": last_error}
 
-
-def _parse_ddg_result(r: Dict[str, Any]) -> Dict[str, Any]:
+def _parse_ddg_result(r: Dict[str, Any], source: str = "DuckDuckGo") -> Dict[str, Any]:
     """Map a raw DDGS result dict to our internal job schema."""
     title: str = r.get("title", "Unknown")
-    company = title.split(" - ")[-1] if " - " in title else "Unknown"
+    # Try to extract company from common 'Title - Company' or 'Title at Company' formats
+    if " - " in title:
+        company = title.split(" - ")[-1].strip()
+    elif " at " in title.lower():
+        company = title.lower().split(" at ")[-1].strip().title()
+    else:
+        company = "Unknown"
     return {
         "title": title,
         "url": r.get("href", ""),
         "description": r.get("body", ""),
         "company": company,
-        "source": "DuckDuckGo",
+        "source": source,
     }
 
 
