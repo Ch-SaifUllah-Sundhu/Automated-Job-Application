@@ -1,9 +1,39 @@
-node_modules/
-.next/
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+*.egg-info/
+
+# ── Secrets (NEVER commit) ───────────────────────────────────
 .env
 .env.local
 .env.*.local
 *.pem
+
+# ── Next.js / Node ───────────────────────────────────────────
+node_modules/
+.next/
+out/
+
+# ── OS ───────────────────────────────────────────────────────
 .DS_Store
-__pycache__/
-venv/
+Thumbs.db
+
+# ── GSD Methodology framework (local-only, not project code) ─
+.agent/
+.agents/
+.gsd/
+.gemini/
+scripts/
+adapters/
+GSD-STYLE.md
+PROJECT_RULES.md
+model_capabilities.yaml
+VERSION
+
+# ── Placeholder / draft docs not yet ready for review ────────
+SRS.md
+UI_UX.md

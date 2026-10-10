@@ -1,45 +1,51 @@
 """
-Tests — Module 4: Core LangGraph Agent
-========================================
-How to run:
-    cd backend
-    python -m pytest test_agent.py -v
+backend/test_agent.py
+=====================
+Test suite — Module 4: Core LangGraph Agent
 
-Tests are structured in three tiers:
-  1. Unit tests  — individual node functions (mocked dependencies)
-  2. Integration test — full agent pipeline (real DuckDuckGo + Groq)
-  3. Smoke test  — quick sanity check without any network calls
+Run (unit + smoke only, no real API calls):
+    pytest -m "not integration" -v
 
-Known Bugs Covered:
-  - test_search_rate_limit_retry: verifies back-off logic fires on first failure
-  - test_draft_no_jobs: verifies short-circuit when no jobs found
-  - test_save_skips_when_no_url: verifies DB node skips rows with empty URLs
+Run everything (requires valid .env keys):
+    pytest -v
+
+Test tiers
+----------
+Tier 1 — Unit       : individual node functions, all deps mocked
+Tier 2 — Smoke      : full pipeline, all external deps mocked
+Tier 3 — Integration: real DuckDuckGo + Groq + Supabase (skipped in CI)
+
+Bug coverage
+------------
+B1  test_search_rate_limit_retry  — DDG retries on first failure
+B1  test_search_all_retries_fail  — DDG gives up after 3 attempts
+B2  (documented, not testable here — requires HTTP auth middleware)
+B3  test_save_skips_when_no_url   — upsert skipped when job has no URL
 """
 
 from __future__ import annotations
 
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-# Ensure backend/ is on the path when run from project root
+# Allow running from project root or backend/
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-def _base_state(overrides: dict | None = None) -> dict:
-    """Return a minimal valid AgentState for testing."""
-    base = {
+# ---------------------------------------------------------------------------
+# Fixtures & helpers
+# ---------------------------------------------------------------------------
+def _state(**overrides) -> dict:
+    """Return a minimal valid AgentState dict, with optional overrides."""
+    return {
         "keywords": "Python Developer",
         "location": "Remote",
         "user_resume": (
-            "Experienced Python developer with 3 years building REST APIs "
-            "using FastAPI and Django. Proficient in PostgreSQL, Docker, and "
-            "CI/CD pipelines."
+            "3 years building REST APIs with FastAPI and Django. "
+            "Proficient in PostgreSQL, Docker, and CI/CD."
         ),
         "found_jobs": [],
         "selected_job": None,
@@ -47,299 +53,333 @@ def _base_state(overrides: dict | None = None) -> dict:
         "cover_letter": "",
         "status": "",
         "error": None,
+        **overrides,
     }
-    if overrides:
-        base.update(overrides)
-    return base
 
 
 def _fake_job(n: int = 1) -> dict:
     return {
-        "title": f"Senior Python Developer - FakeCompany{n}",
-        "url": f"https://example.com/job/{n}",
-        "description": "We need a Python expert. FastAPI, PostgreSQL, Docker required.",
-        "company": f"FakeCompany{n}",
+        "title": f"Senior Python Developer - Corp{n}",
+        "url": f"https://example.com/jobs/{n}",
+        "description": "FastAPI, PostgreSQL, Docker required.",
+        "company": f"Corp{n}",
         "source": "DuckDuckGo",
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Tier 1: Unit tests — search_jobs node
-# ─────────────────────────────────────────────────────────────────────────────
-class TestSearchJobsNode:
+def _fake_ddg_raw(n: int = 1) -> dict:
+    return {
+        "title": f"Python Dev - Corp{n}",
+        "href": f"https://linkedin.com/jobs/{n}",
+        "body": "We need Python skills.",
+    }
 
-    def test_search_returns_jobs(self):
-        """search_jobs correctly maps DDGS results to the expected schema."""
+
+# ---------------------------------------------------------------------------
+# Tier 1 — Unit: search_jobs
+# ---------------------------------------------------------------------------
+class TestSearchJobs:
+
+    def test_returns_mapped_jobs(self):
+        """DDGS results are correctly mapped to our job schema."""
         from agent import search_jobs
 
-        fake_results = [
-            {
-                "title": "Python Dev - AcmeCorp",
-                "href": "https://linkedin.com/jobs/1",
-                "body": "We need Python skills.",
-            }
-        ]
-        with patch("agent.DDGS") as mock_ddgs:
-            mock_ddgs.return_value.text.return_value = fake_results
-            result = search_jobs(_base_state())
+        with patch("agent.DDGS") as MockDDGS:
+            MockDDGS.return_value.text.return_value = [_fake_ddg_raw()]
+            result = search_jobs(_state())
 
         assert result["status"] == "Jobs Found"
-        assert len(result["found_jobs"]) == 1
-        assert result["found_jobs"][0]["url"] == "https://linkedin.com/jobs/1"
         assert result["error"] is None
+        jobs = result["found_jobs"]
+        assert len(jobs) == 1
+        assert jobs[0]["url"] == "https://linkedin.com/jobs/1"
+        assert jobs[0]["source"] == "DuckDuckGo"
 
-    def test_search_empty_results(self):
-        """search_jobs handles an empty result list gracefully."""
+    def test_empty_results_is_ok(self):
+        """An empty DDGS result is not an error — just zero jobs."""
         from agent import search_jobs
 
-        with patch("agent.DDGS") as mock_ddgs:
-            mock_ddgs.return_value.text.return_value = []
-            result = search_jobs(_base_state())
+        with patch("agent.DDGS") as MockDDGS:
+            MockDDGS.return_value.text.return_value = []
+            result = search_jobs(_state())
 
         assert result["status"] == "Jobs Found"
         assert result["found_jobs"] == []
 
-    def test_search_rate_limit_retry(self):
-        """
-        Bug coverage: DuckDuckGo raises RateLimitException on first call.
-        search_jobs must retry and succeed on the second attempt.
-        """
+    def test_rate_limit_retry_succeeds(self):
+        """B1: First call raises, second succeeds — status should be Jobs Found."""
         from agent import search_jobs
 
-        call_count = {"n": 0}
+        attempts = {"n": 0}
 
-        def flaky_text(*args, **kwargs):
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                raise Exception("RateLimitException: throttled")
-            return [{"title": "Dev - Corp", "href": "https://example.com", "body": "desc"}]
+        def flaky(*args, **kwargs):
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                raise Exception("RateLimitException")
+            return [_fake_ddg_raw()]
 
-        with patch("agent.DDGS") as mock_ddgs:
-            with patch("agent.time.sleep"):  # don't actually sleep in tests
-                mock_ddgs.return_value.text.side_effect = flaky_text
-                result = search_jobs(_base_state())
+        with patch("agent.DDGS") as MockDDGS:
+            with patch("agent.time.sleep"):  # skip real sleep in tests
+                MockDDGS.return_value.text.side_effect = flaky
+                result = search_jobs(_state())
 
         assert result["status"] == "Jobs Found"
-        assert call_count["n"] == 2  # confirmed retry happened
+        assert attempts["n"] == 2  # confirmed one retry
 
-    def test_search_all_retries_fail(self):
-        """If all 3 DuckDuckGo attempts fail, return Search Failed status."""
+    def test_all_retries_exhausted(self):
+        """B1: All 3 attempts fail → Search Failed with error message."""
         from agent import search_jobs
 
-        with patch("agent.DDGS") as mock_ddgs:
+        with patch("agent.DDGS") as MockDDGS:
             with patch("agent.time.sleep"):
-                mock_ddgs.return_value.text.side_effect = Exception("Network error")
-                result = search_jobs(_base_state())
+                MockDDGS.return_value.text.side_effect = Exception("Network error")
+                result = search_jobs(_state())
 
         assert result["status"] == "Search Failed"
         assert "Network error" in result["error"]
         assert result["found_jobs"] == []
 
+    def test_company_extracted_from_title(self):
+        """Company is parsed from 'Title - Company' formatted titles."""
+        from agent import _parse_ddg_result
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Tier 1: Unit tests — draft_documents node
-# ─────────────────────────────────────────────────────────────────────────────
-class TestDraftDocumentsNode:
+        job = _parse_ddg_result({"title": "Python Dev - Acme Corp", "href": "https://x.com", "body": ""})
+        assert job["company"] == "Acme Corp"
 
-    def test_draft_no_api_key(self, monkeypatch):
-        """draft_documents fails immediately when GROQ_API_KEY is missing."""
+    def test_company_fallback_when_no_dash(self):
+        """Company defaults to 'Unknown' when title has no ' - ' separator."""
+        from agent import _parse_ddg_result
+
+        job = _parse_ddg_result({"title": "Python Dev", "href": "https://x.com", "body": ""})
+        assert job["company"] == "Unknown"
+
+
+# ---------------------------------------------------------------------------
+# Tier 1 — Unit: draft_documents
+# ---------------------------------------------------------------------------
+class TestDraftDocuments:
+
+    def test_fails_without_api_key(self, monkeypatch):
+        """Missing GROQ_API_KEY → Drafting Failed immediately."""
         from agent import draft_documents
 
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
-        result = draft_documents(_base_state({"found_jobs": [_fake_job()]}))
+        result = draft_documents(_state(found_jobs=[_fake_job()]))
 
         assert result["status"] == "Drafting Failed"
         assert "GROQ_API_KEY" in result["error"]
-
-    def test_draft_no_jobs(self, monkeypatch):
-        """
-        Bug coverage: draft_documents must short-circuit when found_jobs=[].
-        """
-        from agent import draft_documents
-
-        monkeypatch.setenv("GROQ_API_KEY", "fake-key")
-        result = draft_documents(_base_state({"found_jobs": []}))
-
-        assert result["status"] == "No Jobs Found"
         assert result["cover_letter"] == ""
 
-    def test_draft_success(self, monkeypatch):
-        """draft_documents returns cover_letter and tailored_resume on success."""
+    def test_short_circuits_when_no_jobs(self, monkeypatch):
+        """B2-adjacent: no jobs → No Jobs Found, Groq is never called."""
         from agent import draft_documents
 
         monkeypatch.setenv("GROQ_API_KEY", "fake-key")
 
-        fake_llm = MagicMock()
-        fake_llm.invoke.side_effect = [
-            MagicMock(content="This is a cover letter."),
-            MagicMock(content="• Bullet 1\n• Bullet 2\n• Bullet 3"),
-        ]
+        with patch("agent.ChatGroq") as MockLLM:
+            result = draft_documents(_state(found_jobs=[]))
 
-        with patch("agent.ChatGroq", return_value=fake_llm):
-            result = draft_documents(_base_state({"found_jobs": [_fake_job()]}))
+        assert result["status"] == "No Jobs Found"
+        MockLLM.assert_not_called()
 
-        assert result["status"] == "Drafting Complete"
-        assert result["cover_letter"] == "This is a cover letter."
-        assert "Bullet 1" in result["tailored_resume"]
-        assert result["selected_job"] is not None
+    def test_success_path(self, monkeypatch):
+        """Happy path: Groq returns content, state is updated correctly."""
+        from agent import draft_documents
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Tier 1: Unit tests — save_to_database node
-# ─────────────────────────────────────────────────────────────────────────────
-class TestSaveToDatabaseNode:
-
-    def test_save_skips_when_no_supabase(self):
-        """save_to_database skips gracefully when supabase client is None."""
-        import agent as agent_module
-        original = agent_module.supabase
-        agent_module.supabase = None
-        try:
-            from agent import save_to_database
-            result = save_to_database(
-                _base_state({"status": "Drafting Complete", "selected_job": _fake_job()})
-            )
-            assert "Skipped" in result["status"]
-        finally:
-            agent_module.supabase = original
-
-    def test_save_skips_when_no_url(self):
-        """
-        Bug coverage: if selected_job has no URL, upsert cannot deduplicate.
-        Node should skip with 'DB Skipped (No URL)'.
-        """
-        import agent as agent_module
-        mock_supabase = MagicMock()
-        original = agent_module.supabase
-        agent_module.supabase = mock_supabase
-        try:
-            from agent import save_to_database
-            state = _base_state({
-                "status": "Drafting Complete",
-                "selected_job": {"title": "Dev", "url": "", "company": "Corp", "description": ""},
-            })
-            result = save_to_database(state)
-            assert result["status"] == "DB Skipped (No URL)"
-            mock_supabase.table.assert_not_called()
-        finally:
-            agent_module.supabase = original
-
-    def test_save_skips_on_failed_pipeline(self):
-        """save_to_database passes through the failed status without touching DB."""
-        import agent as agent_module
-        mock_supabase = MagicMock()
-        original = agent_module.supabase
-        agent_module.supabase = mock_supabase
-        try:
-            from agent import save_to_database
-            result = save_to_database(_base_state({"status": "Search Failed"}))
-            assert result["status"] == "Search Failed"
-            mock_supabase.table.assert_not_called()
-        finally:
-            agent_module.supabase = original
-
-    def test_save_calls_upsert(self):
-        """save_to_database calls supabase.table('jobs').upsert() on success."""
-        import agent as agent_module
-        mock_supabase = MagicMock()
-        original = agent_module.supabase
-        agent_module.supabase = mock_supabase
-        try:
-            from agent import save_to_database
-            state = _base_state({
-                "status": "Drafting Complete",
-                "selected_job": _fake_job(),
-            })
-            result = save_to_database(state)
-            assert result["status"] == "Saved to DB"
-            mock_supabase.table.assert_called_once_with("jobs")
-        finally:
-            agent_module.supabase = original
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Tier 2: Smoke test — full pipeline with mocked network (no real API calls)
-# ─────────────────────────────────────────────────────────────────────────────
-class TestFullPipelineSmoke:
-
-    def test_pipeline_end_to_end_mocked(self, monkeypatch):
-        """
-        Full pipeline smoke test: mocks DuckDuckGo + Groq + Supabase.
-        Verifies the state flows through all 3 nodes correctly.
-        """
-        import agent as agent_module
         monkeypatch.setenv("GROQ_API_KEY", "fake-key")
 
-        mock_supabase = MagicMock()
-        agent_module.supabase = mock_supabase
-
-        fake_results = [{"title": "Dev - Corp", "href": "https://corp.com/job/1", "body": "Python needed."}]
-        fake_llm = MagicMock()
-        fake_llm.invoke.side_effect = [
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = [
             MagicMock(content="Cover letter text."),
             MagicMock(content="• Bullet 1\n• Bullet 2\n• Bullet 3"),
         ]
 
-        with patch("agent.DDGS") as mock_ddgs:
-            with patch("agent.ChatGroq", return_value=fake_llm):
-                mock_ddgs.return_value.text.return_value = fake_results
-                result = agent_module.agent_app.invoke(_base_state())
+        with patch("agent.ChatGroq", return_value=mock_llm):
+            result = draft_documents(_state(found_jobs=[_fake_job()]))
+
+        assert result["status"] == "Drafting Complete"
+        assert result["cover_letter"] == "Cover letter text."
+        assert "Bullet 1" in result["tailored_resume"]
+        assert result["selected_job"] == _fake_job()
+        assert result["error"] is None
+        assert mock_llm.invoke.call_count == 2  # cover letter + resume
+
+    def test_groq_exception_is_caught(self, monkeypatch):
+        """Groq SDK raising an error → Drafting Failed, not an unhandled exception."""
+        from agent import draft_documents
+
+        monkeypatch.setenv("GROQ_API_KEY", "fake-key")
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = RuntimeError("Groq 503")
+
+        with patch("agent.ChatGroq", return_value=mock_llm):
+            result = draft_documents(_state(found_jobs=[_fake_job()]))
+
+        assert result["status"] == "Drafting Failed"
+        assert "Groq 503" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# Tier 1 — Unit: save_to_database
+# ---------------------------------------------------------------------------
+class TestSaveToDatabase:
+
+    def _with_mock_supabase(self, mock_sb):
+        """Context manager: temporarily replace the module-level supabase client."""
+        import agent as _agent
+        original = _agent.supabase
+        _agent.supabase = mock_sb
+        return original
+
+    def _restore(self, original):
+        import agent as _agent
+        _agent.supabase = original
+
+    def test_skips_when_not_configured(self):
+        """Supabase=None → DB Skipped (No Connection), no exception."""
+        import agent as _agent
+        original = _agent.supabase
+        _agent.supabase = None
+        try:
+            from agent import save_to_database
+            result = save_to_database(_state(status="Drafting Complete", selected_job=_fake_job()))
+        finally:
+            _agent.supabase = original
+
+        assert "Skipped" in result["status"]
+
+    def test_skips_on_pipeline_failure(self):
+        """Upstream failure statuses propagate without touching the DB."""
+        import agent as _agent
+        mock_sb = MagicMock()
+        original = self._with_mock_supabase(mock_sb)
+        try:
+            from agent import save_to_database
+
+            for bad_status in ("Search Failed", "No Jobs Found", "Drafting Failed"):
+                result = save_to_database(_state(status=bad_status))
+                assert result["status"] == bad_status
+
+        finally:
+            self._restore(original)
+
+        mock_sb.table.assert_not_called()
+
+    def test_skips_when_no_url(self):
+        """B3: Job without URL → DB Skipped (No URL), upsert never called."""
+        import agent as _agent
+        mock_sb = MagicMock()
+        original = self._with_mock_supabase(mock_sb)
+        try:
+            from agent import save_to_database
+            state = _state(
+                status="Drafting Complete",
+                selected_job={"title": "Dev", "url": "", "company": "Corp", "description": ""},
+            )
+            result = save_to_database(state)
+        finally:
+            self._restore(original)
+
+        assert result["status"] == "DB Skipped (No URL)"
+        mock_sb.table.assert_not_called()
+
+    def test_upsert_called_with_correct_data(self):
+        """Happy path: upsert is called once with the expected row dict."""
+        import agent as _agent
+        mock_sb = MagicMock()
+        original = self._with_mock_supabase(mock_sb)
+        try:
+            from agent import save_to_database
+            result = save_to_database(
+                _state(status="Drafting Complete", selected_job=_fake_job())
+            )
+        finally:
+            self._restore(original)
+
+        assert result["status"] == "Saved to DB"
+        mock_sb.table.assert_called_once_with("jobs")
+        upsert_call = mock_sb.table.return_value.upsert
+        upsert_call.assert_called_once()
+        row = upsert_call.call_args[0][0]
+        assert row["url"] == "https://example.com/jobs/1"
+        assert row["source"] == "DuckDuckGo"
+
+
+# ---------------------------------------------------------------------------
+# Tier 2 — Smoke: full pipeline (all deps mocked)
+# ---------------------------------------------------------------------------
+class TestPipelineSmoke:
+
+    def test_full_pipeline_mocked(self, monkeypatch):
+        """
+        End-to-end smoke: verifies all 3 nodes run and state is correct.
+        No real network calls — DuckDuckGo, Groq, and Supabase all mocked.
+        """
+        import agent as _agent
+        monkeypatch.setenv("GROQ_API_KEY", "fake-key")
+
+        mock_sb = MagicMock()
+        _agent.supabase = mock_sb
+
+        mock_llm = MagicMock()
+        mock_llm.invoke.side_effect = [
+            MagicMock(content="Great cover letter."),
+            MagicMock(content="• A\n• B\n• C"),
+        ]
+
+        with patch("agent.DDGS") as MockDDGS:
+            with patch("agent.ChatGroq", return_value=mock_llm):
+                MockDDGS.return_value.text.return_value = [_fake_ddg_raw()]
+                result = _agent.agent_app.invoke(_state())
 
         assert result["status"] == "Saved to DB"
         assert len(result["found_jobs"]) == 1
-        assert result["cover_letter"] == "Cover letter text."
+        assert result["cover_letter"] == "Great cover letter."
         assert result["error"] is None
+        mock_sb.table.assert_called_once_with("jobs")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Tier 3: Integration test — real network calls (skipped in CI by default)
-# ─────────────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Tier 3 — Integration (real APIs, skipped in CI)
+# ---------------------------------------------------------------------------
 @pytest.mark.integration
 class TestIntegration:
     """
-    Runs against real DuckDuckGo and Groq APIs.
-    Requires valid keys in .env.
-    Skip in CI with: pytest -m "not integration"
+    Calls real DuckDuckGo and Groq APIs.
+    Run with:  pytest -m integration -v
+    Skip with: pytest -m "not integration"
+    Requires valid .env in project root.
     """
 
-    def test_real_pipeline(self):
-        """Full pipeline with real API calls — validates end-to-end flow."""
-        import agent as agent_module
+    def test_real_search_and_draft(self):
+        """Real pipeline — validates status is set and no unhandled exception."""
+        import agent as _agent
 
-        result = agent_module.agent_app.invoke(
-            _base_state({
-                "keywords": "Python Developer",
-                "location": "Remote",
-            })
+        result = _agent.agent_app.invoke(
+            _state(keywords="Python Backend Developer", location="Remote")
         )
 
-        print("\n📊 Integration Test Result:")
-        print(f"   Status      : {result.get('status')}")
-        print(f"   Jobs Found  : {len(result.get('found_jobs', []))}")
+        print(f"\nStatus     : {result.get('status')}")
+        print(f"Jobs Found : {len(result.get('found_jobs', []))}")
         if result.get("cover_letter"):
-            print(f"   Cover Letter: {result['cover_letter'][:200]}...")
+            print(f"Cover (200): {result['cover_letter'][:200]}...")
         if result.get("error"):
-            print(f"   Error       : {result['error']}")
+            print(f"Error      : {result['error']}")
 
-        # Soft assertion — search may return 0 results on rate-limit,
-        # but status must always be set.
-        assert result.get("status") not in (None, "")
+        assert result.get("status") not in (None, ""), "Status must always be set."
 
 
+# ---------------------------------------------------------------------------
+# Quick smoke when run directly (no pytest)
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Quick smoke run without pytest
-    print("=" * 60)
-    print("🚀 Running Module 4 Smoke Test")
-    print("=" * 60)
-    t = TestFullPipelineSmoke()
-    # Can't use monkeypatch outside pytest, run integration test instead
-    import agent as agent_module
-    result = agent_module.agent_app.invoke(_base_state())
-    print(f"\n✅ Status : {result.get('status')}")
-    print(f"🔍 Jobs   : {len(result.get('found_jobs', []))}")
-    if result.get("cover_letter"):
-        print(f"📝 Letter : {result['cover_letter'][:300]}...")
-    if result.get("error"):
-        print(f"❌ Error  : {result['error']}")
-    print("=" * 60)
-    print("Module 4 smoke run complete!")
+    print("Running quick smoke test (mocked)...")
+    t = TestPipelineSmoke()
+
+    class _MP:  # minimal monkeypatch shim
+        def setenv(self, k, v):
+            os.environ[k] = v
+
+    t.test_full_pipeline_mocked(_MP())
+    print("✅ Smoke test passed.")
