@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.env
+.env.local
+.env.*.local
+*.pem
+.DS_Store
+__pycache__/
+venv/
+PRD.md
+SRS.md
+Architecture.md
+UI_UX.md
+Development_Plan.md
+Project_Tracker.md
