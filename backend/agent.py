@@ -78,6 +78,7 @@ class AgentState(TypedDict):
     cover_letter: str                       # AI-generated cover letter
     status: str                             # Human-readable pipeline status
     error: Optional[str]                    # Last error message, or None
+    user_id: Optional[str]                  # Authenticated user ID (Bug B3 fix)
 
 
 # ---------------------------------------------------------------------------
@@ -346,8 +347,30 @@ def save_to_database(state: AgentState) -> Dict[str, Any]:
             "description": job.get("description", ""),
             "source": job.get("source", "DuckDuckGo"),
         }
-        supabase.table("jobs").upsert(row, on_conflict="url").execute()
+        job_result = supabase.table("jobs").upsert(row, on_conflict="url").execute()
         log.info("Job saved: %s", job.get("title"))
+
+        # B3 fix: Persist application row when user_id is present
+        user_id = state.get("user_id")
+        if user_id:
+            job_id = None
+            if job_result and getattr(job_result, "data", None) and len(job_result.data) > 0:
+                job_id = job_result.data[0].get("id")
+            if not job_id:
+                existing = supabase.table("jobs").select("id").eq("url", url).limit(1).execute()
+                if existing and getattr(existing, "data", None) and len(existing.data) > 0:
+                    job_id = existing.data[0].get("id")
+            if job_id:
+                app_row = {
+                    "user_id": user_id,
+                    "job_id": job_id,
+                    "status": "Found",
+                    "tailored_resume": state.get("tailored_resume", ""),
+                    "cover_letter": state.get("cover_letter", ""),
+                }
+                supabase.table("applications").upsert(app_row, on_conflict="user_id,job_id").execute()
+                log.info("Application row saved for user: %s", user_id)
+
         return {"status": "Saved to DB"}
     except Exception as exc:  # noqa: BLE001
         log.error("DB save failed: %s", exc)

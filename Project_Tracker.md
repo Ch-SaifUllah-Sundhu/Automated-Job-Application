@@ -1,57 +1,105 @@
 # Project Tracker & Task Breakdown
 
-## 1. Project Setup [✅ Done]
-- [x] Create project directory structure.
-- [x] Initialize Next.js frontend with Tailwind.
+> **Project:** Job Application Assistant (SaaS)  
+> **Source of Truth:** [AGENTS.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/AGENTS.md) & [Architecture.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/Architecture.md)  
+> **Last Updated:** 2026-10-11  
+
+---
+
+## Completed Milestones ✅
+
+### Module 1: Project Setup [✅ Done]
+- [x] Create monorepo directory structure (`frontend/`, `backend/`).
+- [x] Initialize Next.js frontend with Tailwind CSS.
 - [x] Initialize Python FastAPI backend and virtual environment.
 
-## 2. Database Schema [✅ Done]
-- [x] Design Supabase tables (Profiles, Jobs, Applications).
-- [x] Write `schema.sql` for table creation.
-- [x] Configure Row Level Security (RLS) policies.
+### Module 2: Database Schema & Security [✅ Done]
+- [x] Design core Supabase tables (`profiles`, `jobs`, `applications`).
+- [x] Design new SaaS tables (`subscriptions`, `automation_logs`, `interview_sessions`, `notifications`).
+- [x] Write `schema.sql` with full table DDL, alterations, and Row Level Security (RLS) policies.
+- [x] Document manual update steps in Supabase Dashboard SQL Editor.
 
-## 3. Environment Variables [✅ Done]
-- [x] Create `.env` files.
-- [x] Securely store Supabase URL and Anon Key.
-- [x] Securely store Groq API (Llama 3) Key.
-- [x] Update `.gitignore` to protect sensitive data.
+### Module 3: Environment & Configuration [✅ Done]
+- [x] Create `.env` configuration file with Supabase and Groq keys.
+- [x] Update `.gitignore` to prevent secret leakage.
+- [x] Consolidate dependencies in `requirements.txt`.
 
-## 4. Core Agent (Backend) [✅ Done]
+### Module 4: Core Agent Engine (Backend) [✅ Done]
 - [x] Connect Python script to Supabase client.
-- [x] Implement DuckDuckGo Search API for fetching jobs (with 3-attempt retry + back-off).
+- [x] Implement DuckDuckGo Search API for fetching jobs with 3-attempt exponential back-off retry (Bug B1 fixed).
 - [x] Implement Groq API (Llama 3) for generating tailored cover letters and resume bullets.
-- [x] Build LangGraph state machine (Search → Draft → Save → END).
-- [x] Write full test suite: unit, smoke (mocked), and integration tests.
-- [x] Wire `/search-jobs` stub in FastAPI `main.py`.
+- [x] Build LangGraph state machine (`search_jobs` → `draft_documents` → `save_to_database` → `END`).
+- [x] Implement test suite (18 unit/smoke tests passing cleanly).
+- [x] Wire initial `/search-jobs` stub in FastAPI `main.py`.
 
-### Known Bugs / Limitations (Module 4)
-| # | Description | Location | Severity | Fix Planned In |
-|---|-------------|----------|----------|----------------|
-| B1 | DuckDuckGo rate-limits: DDGS().text() throws RateLimitException under rapid calls | `agent.py:search_jobs` | Medium | ✅ Fixed — 3-retry with exponential back-off |
-| B2 | No auth on `/search-jobs` endpoint — any caller can trigger the pipeline | `main.py` | High | Module 6 (Supabase Auth middleware) |
-| B3 | `save_to_database` saves job only, NOT application row (no user_id in agent scope) | `agent.py:save_to_database` | Medium | Module 5 (FastAPI auth context) |
-| B4 | Groq context window: long resumes/JDs truncated to 500 chars | `agent.py:draft_documents` | Low | Module 5 (chunking strategy) |
+---
 
-## 5. FastAPI Routes [🏃 Next Up]
-- [ ] Set up full REST API endpoints (`/search-jobs`, `/apply`).
-- [ ] Create Pydantic models for request/response validation.
-- [ ] Link API endpoints to LangGraph agent execution with user context.
-- [ ] Add Supabase JWT auth middleware to protect routes.
-- [ ] Test APIs using Swagger UI (`/docs`).
+## SaaS Architecture Blueprint Roadmap (Modules 5 – 12) 🏃
 
-## 6. Supabase Auth (Frontend) [⬜ Null]
-- [ ] Install Supabase JS client in Next.js.
-- [ ] Create Sign Up / Log In pages.
-- [ ] Implement session management.
-- [ ] Protect dashboard routes (redirect unauthenticated users).
+### Module 5: FastAPI Auth & Core Routes [✅ Done]
+- [x] **Config**: Create `backend/config.py` with `pydantic-settings` to validate `.env` at startup.
+- [x] **Dependencies**: Create `backend/dependencies.py` with `get_current_user()` (Supabase JWT verification).
+- [x] **Auth Router**: Create `backend/routers/auth.py` (`GET /auth/me`, `POST /auth/logout`).
+- [x] **Jobs Router**: Create `backend/routers/jobs.py` (migrated `/search-jobs`, added paginated `GET /jobs`).
+- [x] **Applications Router**: Create `backend/routers/applications.py` (`POST /apply`, `GET /applications`, `PATCH /status`).
+- [x] **Profile Router**: Create `backend/routers/profile.py` (`GET/PUT /profile`, `POST /profile/resume`).
+- [x] **Resume Parser Service**: Create `backend/services/resume_parser.py` (PDF & DOCX parsing via `pdfminer.six` and `python-docx`).
+- [x] **Main App Refactor**: Refactor `backend/main.py` into application factory registering modular routers.
+- [x] **Bug B2 Fix**: Enforce `get_current_user` auth dependency across all private endpoints.
+- [x] **Bug B3 Fix**: Pass authenticated `user_id` into `AgentState` and save `applications` row in agent.
+- [x] **Tests**: Comprehensive test suite (39 tests passing cleanly across `test_auth.py`, `test_applications.py`, `test_profile.py`, `test_jobs.py`, and `test_agent.py`).
 
-## 7. Frontend Dashboard [⬜ Null]
-- [ ] Build Profile Settings page (resume upload).
-- [ ] Build Kanban board UI for job tracking.
-- [ ] Connect frontend API calls to FastAPI backend.
-- [ ] Build review modal for human-in-the-loop approval.
+### Module 6: Frontend Auth & Onboarding [⬜ Planned]
+- [ ] Install Supabase client dependencies (`@supabase/supabase-js`, `@supabase/ssr`).
+- [ ] Create `frontend/src/lib/supabase/client.ts` (`createBrowserClient()`).
+- [ ] Create `frontend/src/lib/supabase/server.ts` (`createServerClient()` with cookie store).
+- [ ] Add Next.js auth middleware `frontend/src/middleware.ts` to protect `/dashboard/**`.
+- [ ] Build `frontend/src/app/(auth)/login/page.tsx` (Email/password + Google & LinkedIn OAuth).
+- [ ] Build `frontend/src/app/(auth)/signup/page.tsx` (Registration with terms checkbox).
+- [ ] Build `frontend/src/app/onboarding/page.tsx` (3-step onboarding wizard: basic info, resume upload, confirmation).
+- [ ] Implement `frontend/src/hooks/useAuth.ts` hook for global auth state management.
 
-## 8. Web Automation (Playwright) [⬜ Null]
-- [ ] Write Python Playwright script to fill basic application forms.
-- [ ] Integrate Playwright script into LangGraph as the final node.
-- [ ] Handle failures (e.g., CAPTCHAs, unknown fields) gracefully.
+### Module 7: Job Dashboard & Smart Match Scoring [⬜ Planned]
+- [ ] **Match Scorer**: Create `backend/services/match_service.py` using TF-IDF + Cosine Similarity (`scikit-learn` & `nltk`).
+- [ ] **Match API**: Update `GET /jobs` to calculate and return `match_score` per job against user's resume.
+- [ ] **Missing Skills Node**: Add `detect_missing_fields` node to LangGraph pipeline.
+- [ ] **Job Listing Page**: Build `frontend/src/app/dashboard/jobs/page.tsx` with search filters and sorting.
+- [ ] **Job Card Component**: Build `frontend/src/components/jobs/JobCard.tsx` with color-coded match score SVG ring.
+- [ ] **Kanban Board**: Build `frontend/src/app/dashboard/page.tsx` with `@dnd-kit` drag-and-drop columns (Found, Applied, Interview, Offer, Rejected).
+
+### Module 8: Dynamic Application + Human-in-Loop Review [⬜ Planned]
+- [ ] **LangGraph Interrupt**: Configure checkpointer breakpoint after `draft_documents` awaiting human approval.
+- [ ] **Celery App**: Setup `backend/workers/celery_app.py` with Redis broker.
+- [ ] **Automation Task Skeleton**: Create `backend/workers/tasks/automation_task.py`.
+- [ ] **Approve Endpoint**: Implement `PATCH /applications/{id}/approve` to trigger Celery task.
+- [ ] **Review Page**: Build `frontend/src/app/dashboard/review/[id]/page.tsx` (side-by-side JD vs tailored document editing).
+- [ ] **Missing Data Modal**: Modal to prompt user for missing fields (manual input or Groq auto-generate).
+- [ ] **Supabase Realtime**: Live updates on application status changes in frontend.
+
+### Module 9: Playwright Automation Engine [⬜ Planned]
+- [ ] Install Playwright and Chromium dependencies (`playwright`, `playwright-stealth`).
+- [ ] Implement robust field detection algorithm (aria-label > placeholder > name > id priority with `FIELD_MAP`).
+- [ ] Implement stealth automation execution in `backend/workers/tasks/automation_task.py`.
+- [ ] Audit trail screenshots uploaded to Supabase Storage bucket `automation-screenshots`.
+- [ ] Execution events logging to `automation_logs` table.
+- [ ] CAPTCHA detection and graceful user pause/notification handler.
+- [ ] Write automation tests in `backend/tests/test_automation.py`.
+
+### Module 10: Subscriptions & Business (Stripe) [⬜ Planned]
+- [ ] Create `backend/services/stripe_service.py` (Checkout sessions, customer portal, webhook verification).
+- [ ] Create `backend/routers/subscriptions.py` (`/billing/checkout`, `/billing/portal`, `/billing/webhook`).
+- [ ] Add `require_pro_tier()` dependency and Redis-backed daily usage rate limiters.
+- [ ] Process Stripe webhook events (`checkout.session.completed`, `customer.subscription.*`).
+- [ ] Build `frontend/src/app/billing/page.tsx` with plan comparisons, upgrade buttons, and billing portal link.
+
+### Module 11: Interview Prep Module [⬜ Planned]
+- [ ] Create `backend/routers/interview.py` (`POST /interview-prep`).
+- [ ] Groq prompt template for 13 tailored questions (5 behavioral, 5 technical, 3 situational with answer keys).
+- [ ] Persist sessions in `interview_sessions` table.
+- [ ] Build `frontend/src/app/interview/[id]/page.tsx` with 3D flip flashcards and practice timer mode.
+
+### Module 12: Chrome Extension (Pro Tier) [⬜ Planned]
+- [ ] Configure `extension/manifest.json` (Manifest V3 with permissions for LinkedIn, Greenhouse, Lever, Workday).
+- [ ] Create `extension/service-worker.js` for token storage and background communication.
+- [ ] Create `extension/content.js` with DOM form detection and autofill execution.
+- [ ] Create `extension/popup/` React popup interface for 1-click filling and field preview.

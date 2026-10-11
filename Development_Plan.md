@@ -1,36 +1,13 @@
-# Development Plan
+# Development Plan — Job Application Assistant
 
-## Phase 1: Foundation ✅ Complete
-- Set up Supabase DB, Next.js frontend, FastAPI backend.
-- Configured environment variables and `.gitignore`.
+## Approved SaaS Blueprint Status: Approved ✅
 
-## Phase 2: Core Agent Engine ✅ Complete (Module 4)
-- Built LangGraph workflow: Search → Draft → Save → END.
-- DuckDuckGo job search with 3-attempt retry + exponential back-off.
-- Groq / Llama 3 cover letter and resume bullet generation.
-- Supabase job row persistence via upsert.
-- Full test suite: unit tests, mocked smoke test, real integration tests.
+### Completed Phases ✅
+- **Phase 1: Foundation Setup**: Supabase DB, Next.js frontend, FastAPI backend, environment secrets.
+- **Phase 2: Core Agent Engine**: LangGraph pipeline (DDG search with retry + Groq Llama 3 tailoring + Supabase persistence + 15 tests).
+- **Architecture Blueprint**: Multi-tenant SaaS architecture documented in [Architecture.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/Architecture.md) and [AGENTS.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/AGENTS.md).
 
-### Phase 2 Known Bugs
-| ID | Issue | Status |
-|----|-------|--------|
-| B1 | DDG rate-limit retry | ✅ Fixed in `agent.py` |
-| B2 | No auth on `/search-jobs` | 🔴 Fix in Phase 3 |
-| B3 | Application row not saved (no user_id) | 🔴 Fix in Phase 3 |
-| B4 | Resume/JD truncated at 500 chars | 🟡 Acceptable for MVP |
+---
 
-## Phase 3: FastAPI Routes 🏃 Next
-- Full REST endpoints with Pydantic validation.
-- Supabase JWT auth middleware.
-- Link endpoints to LangGraph agent with authenticated user context.
-- Swagger UI testing.
-
-## Phase 4: Frontend Integration
-- Dashboard, Supabase Auth in Next.js.
-- Connect frontend to FastAPI.
-- Human-in-the-loop review modal.
-
-## Phase 5: Automation
-- Playwright scripts for actual job form submission.
-- Integrate as final LangGraph node.
-- Graceful failure handling (CAPTCHAs, unknown fields).
+### Next Execution
+Awaiting user instructions. Active task list is maintained in [Project_Tracker.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/Project_Tracker.md).

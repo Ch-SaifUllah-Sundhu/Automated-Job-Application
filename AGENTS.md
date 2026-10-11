@@ -5,7 +5,7 @@
 > all known bugs, every task (done and pending), precise file-by-file code maps,
 > and coding standards.
 >
-> Last updated: 2026-10-11 | Current module: **4 (Done) → 5 (Next)**
+> Last updated: 2026-10-11 | Current module: **5 (Done) → 6 (Next)**
 > Research basis: Competitive analysis of Simplify, Teal, Jobscan, LazyApply.
 
 ---
@@ -260,16 +260,16 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
 | ID | Description | File | Severity | Status |
 |----|-------------|------|----------|--------|
 | B1 | DuckDuckGo rate-limits | `agent.py:search_jobs` | Medium | ✅ Fixed — 3× retry + back-off |
-| B2 | No auth on `/search-jobs` | `main.py` | 🔴 High | Open — fix in Module 5 |
-| B3 | Application row not saved (no user_id) | `agent.py:save_to_database` | 🔴 High | Open — fix in Module 5 |
+| B2 | No auth on `/search-jobs` | `main.py` / `routers/jobs.py` | 🔴 High | ✅ Fixed — get_current_user required |
+| B3 | Application row not saved (no user_id) | `agent.py:save_to_database` | 🔴 High | ✅ Fixed — user_id in AgentState |
 | B4 | Resume/JD truncated at 500 chars | `agent.py:draft_documents` | 🟡 Low | Acceptable for MVP |
-| B5 | Supabase RLS policies not written | `schema.sql` | 🔴 High | Open — fix in Module 5 (SQL in schema.sql) |
+| B5 | Supabase RLS policies not written | `schema.sql` | 🔴 High | ✅ Full SQL written in schema.sql |
 
 ---
 
 ## 9. Complete Task List
 
-### ✅ Done (Modules 1–4)
+### ✅ Done (Modules 1–5)
 
 - [x] **Module 1** — Project structure: Next.js + FastAPI init
 - [x] **Module 2** — Supabase schema (profiles, jobs, applications + RLS enable)
@@ -278,25 +278,19 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
   - [x] DuckDuckGo search across 10 portals with 3× retry back-off (B1 fixed)
   - [x] Groq cover letter + resume bullet generation
   - [x] Supabase upsert on `jobs` table
-  - [x] 15-test suite: unit + smoke + integration tier
+  - [x] 18-test suite: unit + smoke + integration tier
   - [x] FastAPI `/search-jobs` stub wired to agent
-- [x] `README.md` and `AGENTS.md` created
-
----
-
-### 🏃 Module 5 — FastAPI Auth & Core Routes (START HERE)
-
-- [ ] `backend/config.py` — pydantic-settings BaseSettings (validate env vars at startup)
-- [ ] `backend/dependencies.py` — `get_current_user()` dependency (verify Supabase JWT)
-- [ ] `backend/routers/auth.py` — `GET /auth/me`, `POST /auth/logout`
-- [ ] `backend/routers/jobs.py` — migrate `/search-jobs` here; add `GET /jobs` paginated
-- [ ] `backend/routers/applications.py` — `POST /apply`, `GET /applications`, `PATCH /status`
-- [ ] `backend/routers/profile.py` — `GET/PUT /profile`, `POST /profile/resume`
-- [ ] `backend/services/resume_parser.py` — PDF (pdfminer.six) + DOCX (python-docx) parser
-- [ ] `backend/main.py` — refactor: register routers, remove inline route logic
-- [ ] Fix Bug B3 — pass `user_id` via `AgentState`; save `applications` row in agent
-- [ ] Fix Bug B2 — all routes behind `get_current_user` dependency
-- [ ] Fix Bug B5 — run full RLS policy SQL in Supabase dashboard
+- [x] **Module 5** — FastAPI Auth & Core Routes
+  - [x] `backend/config.py` — pydantic-settings BaseSettings
+  - [x] `backend/dependencies.py` — `get_current_user()` dependency (Supabase JWT verification)
+  - [x] `backend/routers/auth.py` — `GET /auth/me`, `POST /auth/logout`
+  - [x] `backend/routers/jobs.py` — `/search-jobs`, paginated `GET /jobs`
+  - [x] `backend/routers/applications.py` — `POST /apply`, `GET /applications`, `PATCH /status`
+  - [x] `backend/routers/profile.py` — `GET/PUT /profile`, `POST /profile/resume`
+  - [x] `backend/services/resume_parser.py` — PDF + DOCX parser
+  - [x] `backend/main.py` — refactored application factory with modular routers
+  - [x] Fixed Bug B2 & Bug B3
+  - [x] 39 tests passing across all suites
 - [ ] Update `requirements.txt` with: `pydantic-settings`, `pdfminer.six`, `python-docx`, `python-multipart`
 - [ ] Tests: `backend/tests/test_auth.py` + `test_applications.py`
 
