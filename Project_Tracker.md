@@ -49,15 +49,17 @@
 - [x] **Bug B3 Fix**: Pass authenticated `user_id` into `AgentState` and save `applications` row in agent.
 - [x] **Tests**: Comprehensive test suite (39 tests passing cleanly across `test_auth.py`, `test_applications.py`, `test_profile.py`, `test_jobs.py`, and `test_agent.py`).
 
-### Module 6: Frontend Auth & Onboarding [⬜ Planned]
-- [ ] Install Supabase client dependencies (`@supabase/supabase-js`, `@supabase/ssr`).
-- [ ] Create `frontend/src/lib/supabase/client.ts` (`createBrowserClient()`).
-- [ ] Create `frontend/src/lib/supabase/server.ts` (`createServerClient()` with cookie store).
-- [ ] Add Next.js auth middleware `frontend/src/middleware.ts` to protect `/dashboard/**`.
-- [ ] Build `frontend/src/app/(auth)/login/page.tsx` (Email/password + Google & LinkedIn OAuth).
-- [ ] Build `frontend/src/app/(auth)/signup/page.tsx` (Registration with terms checkbox).
-- [ ] Build `frontend/src/app/onboarding/page.tsx` (3-step onboarding wizard: basic info, resume upload, confirmation).
-- [ ] Implement `frontend/src/hooks/useAuth.ts` hook for global auth state management.
+### Module 6: Frontend Auth & Onboarding [✅ Completed]
+- [x] Install Supabase client dependencies (`@supabase/supabase-js`, `@supabase/ssr`, `lucide-react`).
+- [x] Create `frontend/src/lib/supabase/client.ts` (`createBrowserClient()`).
+- [x] Create `frontend/src/lib/supabase/server.ts` (`createServerClient()` with cookie store).
+- [x] Add Next.js auth middleware `frontend/src/middleware.ts` to protect `/dashboard/**` and `/onboarding`.
+- [x] Build `frontend/src/app/(auth)/login/page.tsx` (Email/password + Google & LinkedIn OAuth).
+- [x] Build `frontend/src/app/(auth)/signup/page.tsx` (Registration with terms checkbox).
+- [x] Build `frontend/src/app/onboarding/page.tsx` (3-step onboarding wizard: basic info, resume upload/parse, confirmation).
+- [x] Implement `frontend/src/hooks/useAuth.ts` hook for global auth state management.
+- [x] Implement `frontend/src/lib/api.ts` centralized client for backend communication.
+- [x] Verify production build (`npm run build` completed with 0 errors).
 
 ### Module 7: Job Dashboard & Smart Match Scoring [⬜ Planned]
 - [ ] **Match Scorer**: Create `backend/services/match_service.py` using TF-IDF + Cosine Similarity (`scikit-learn` & `nltk`).

@@ -5,7 +5,7 @@
 > all known bugs, every task (done and pending), precise file-by-file code maps,
 > and coding standards.
 >
-> Last updated: 2026-10-11 | Current module: **5 (Done) → 6 (Next)**
+> Last updated: 2026-10-11 | Current module: **6 (Done) → 7 (Next)**
 > Research basis: Competitive analysis of Simplify, Teal, Jobscan, LazyApply.
 
 ---
@@ -296,16 +296,19 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
 
 ---
 
-### ⬜ Module 6 — Frontend Auth & Onboarding
+### ✅ Module 6 — Frontend Auth & Onboarding (COMPLETE)
 
-- [ ] `npm install @supabase/supabase-js @supabase/ssr`
-- [ ] `frontend/src/lib/supabase/client.ts` — `createBrowserClient()`
-- [ ] `frontend/src/lib/supabase/server.ts` — `createServerClient()` with cookie adapter
-- [ ] `frontend/src/middleware.ts` — protect `/dashboard/**` routes
-- [ ] `frontend/src/app/(auth)/login/page.tsx` — email/password + Google + LinkedIn OAuth
-- [ ] `frontend/src/app/(auth)/signup/page.tsx` — signup + terms
-- [ ] `frontend/src/app/onboarding/page.tsx` — 3-step wizard (profile → resume upload → done)
-- [ ] `frontend/src/hooks/useAuth.ts` — `user`, `signIn`, `signOut`, `signInWithOAuth`
+- [x] `npm install @supabase/supabase-js @supabase/ssr`
+- [x] `frontend/src/lib/supabase/client.ts` — `createBrowserClient()`
+- [x] `frontend/src/lib/supabase/server.ts` — `createServerClient()` with cookie adapter
+- [x] `frontend/src/middleware.ts` — protect `/dashboard/**` routes & `/onboarding`
+- [x] `frontend/src/app/(auth)/login/page.tsx` — email/password + Google + LinkedIn OAuth
+- [x] `frontend/src/app/(auth)/signup/page.tsx` — signup + terms
+- [x] `frontend/src/app/onboarding/page.tsx` — 3-step wizard (profile → resume upload → done)
+- [x] `frontend/src/hooks/useAuth.ts` — `user`, `signIn`, `signOut`, `signInWithOAuth`
+- [x] `frontend/src/lib/api.ts` — centralized API client for backend communication
+- [x] `frontend/src/app/auth/callback/route.ts` — OAuth callback handler
+- [x] Verified full build with `npm run build` (0 TypeScript / Next.js errors)
 
 ---
 
