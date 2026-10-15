@@ -114,6 +114,31 @@ export function useAuth() {
     [supabase]
   );
 
+  const verifyOtp = useCallback(
+    async (email: string, token: string, type: "signup" | "recovery" = "signup") => {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type,
+      });
+      if (error) throw error;
+      return data;
+    },
+    [supabase]
+  );
+
+  const resendOtp = useCallback(
+    async (email: string, type: "signup" = "signup") => {
+      const { data, error } = await supabase.auth.resend({
+        type,
+        email,
+      });
+      if (error) throw error;
+      return data;
+    },
+    [supabase]
+  );
+
   const getAccessToken = useCallback(async (): Promise<string | null> => {
     const {
       data: { session },
@@ -131,6 +156,8 @@ export function useAuth() {
     signInWithOAuth,
     resetPassword,
     updatePassword,
+    verifyOtp,
+    resendOtp,
     getAccessToken,
   };
 }
