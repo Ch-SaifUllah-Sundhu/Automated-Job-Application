@@ -49,16 +49,19 @@
 - [x] **Bug B3 Fix**: Pass authenticated `user_id` into `AgentState` and save `applications` row in agent.
 - [x] **Tests**: Comprehensive test suite (39 tests passing cleanly across `test_auth.py`, `test_applications.py`, `test_profile.py`, `test_jobs.py`, and `test_agent.py`).
 
-### Module 6: Frontend Auth & Onboarding [✅ Completed]
+### Module 6: Frontend Auth & Enterprise Identity [✅ Completed]
 - [x] Install Supabase client dependencies (`@supabase/supabase-js`, `@supabase/ssr`, `lucide-react`).
 - [x] Create `frontend/src/lib/supabase/client.ts` (`createBrowserClient()`).
 - [x] Create `frontend/src/lib/supabase/server.ts` (`createServerClient()` with cookie store).
 - [x] Add Next.js auth middleware `frontend/src/middleware.ts` to protect `/dashboard/**` and `/onboarding`.
-- [x] Build `frontend/src/app/(auth)/login/page.tsx` (Email/password + Google & LinkedIn OAuth).
-- [x] Build `frontend/src/app/(auth)/signup/page.tsx` (Registration with terms checkbox).
+- [x] Build `frontend/src/app/(auth)/login/page.tsx` (Email/password + Google & GitHub SSO + Forgot password).
+- [x] Build `frontend/src/app/(auth)/signup/page.tsx` (Registration with terms checkbox + Google & GitHub SSO).
+- [x] Build `frontend/src/app/(auth)/forgot-password/page.tsx` (Password recovery email dispatch).
+- [x] Build `frontend/src/app/(auth)/reset-password/page.tsx` (Token-based credential reset flow).
 - [x] Build `frontend/src/app/onboarding/page.tsx` (3-step onboarding wizard: basic info, resume upload/parse, confirmation).
-- [x] Implement `frontend/src/hooks/useAuth.ts` hook for global auth state management.
+- [x] Implement `frontend/src/hooks/useAuth.ts` hook for global auth state management (`signIn`, `signUp`, `signOut`, `signInWithOAuth`, `resetPassword`, `updatePassword`).
 - [x] Implement `frontend/src/lib/api.ts` centralized client for backend communication.
+- [x] Enhance `frontend/src/app/auth/callback/route.ts` with error redirection and `next` parameter support.
 - [x] Verify production build (`npm run build` completed with 0 errors).
 
 ### Module 7: Job Dashboard & Smart Match Scoring [⬜ Planned]

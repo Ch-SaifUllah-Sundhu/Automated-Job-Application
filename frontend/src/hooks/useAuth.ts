@@ -79,7 +79,7 @@ export function useAuth() {
   }, [supabase, router]);
 
   const signInWithOAuth = useCallback(
-    async (provider: "google" | "linkedin_oidc") => {
+    async (provider: "google" | "github" | "linkedin_oidc") => {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: provider as Provider,
         options: {
