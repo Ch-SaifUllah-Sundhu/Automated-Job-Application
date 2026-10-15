@@ -1,69 +1,181 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+import Image from "next/image";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  ArrowRight,
+  Shield,
+  Search,
+  Sparkles,
+  Zap,
+  CheckCircle2,
+  Lock,
+  FileText,
+  BarChart3,
+  ExternalLink,
+} from "lucide-react";
+
+export default function HomePage() {
+  const { user } = useAuth();
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+    <div className="min-h-screen w-full bg-[#0B0F19] text-[#E2E8F0] flex flex-col font-sans selection:bg-[#2563EB]/30 selection:text-white">
+      {/* Top Navigation */}
+      <header className="w-full border-b border-[#1F2937] bg-[#0B0F19]/90 backdrop-blur-md sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-[#2563EB]/40 shadow-sm">
             <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+              src="/logo.jpg"
+              alt="JobPilot Logo"
+              fill
+              className="object-cover"
+              priority
             />
-            Deploy Now
-          </a>
+          </div>
+          <div>
+            <span className="text-sm font-semibold tracking-tight text-white block leading-none">
+              JobPilot
+            </span>
+            <span className="text-[10px] text-[#94A3B8]">Talent Operations</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 text-xs">
           <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+            href="http://localhost:8000/docs"
             target="_blank"
-            rel="noopener noreferrer"
+            rel="noreferrer"
+            className="hidden sm:flex items-center gap-1 text-[#94A3B8] hover:text-white transition-colors"
           >
-            Documentation
+            <span>API Telemetry</span>
+            <ExternalLink className="w-3 h-3" />
           </a>
+
+          {user ? (
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-1.5 h-8 px-3.5 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white transition-colors"
+            >
+              <span>Go to Dashboard</span>
+              <ArrowRight className="w-3 h-3" />
+            </Link>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link
+                href="/login"
+                className="h-8 px-3 rounded bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-medium text-[#CBD5E1] flex items-center transition-colors"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/signup"
+                className="h-8 px-3.5 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white flex items-center gap-1 transition-colors"
+              >
+                <span>Get Started</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-20 text-center relative overflow-hidden">
+        {/* Ambient Glow */}
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-[#2563EB]/10 blur-[120px] rounded-full pointer-events-none" />
+
+        <div className="max-w-3xl mx-auto relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#111827] border border-[#1F2937] text-[11px] text-[#94A3B8] mb-6">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Autonomous Application Infrastructure v0.6</span>
+          </div>
+
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-tight">
+            Automate Job Search. <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#60A5FA] via-[#3B82F6] to-[#2563EB]">
+              Accelerate Career Placement.
+            </span>
+          </h1>
+
+          <p className="mt-5 text-sm sm:text-base text-[#94A3B8] max-w-xl mx-auto leading-relaxed">
+            Multi-portal scraping, semantic TF-IDF resume scoring, Groq Llama 3 document tailoring, and end-to-end telemetry—all unified in one enterprise command center.
+          </p>
+
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href={user ? "/dashboard" : "/signup"}
+              className="w-full sm:w-auto h-11 px-6 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold tracking-wide flex items-center justify-center gap-2 shadow-lg shadow-[#2563EB]/25 transition-all"
+            >
+              <span>{user ? "Open Workspace" : "Deploy Your Job Assistant"}</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+
+            <Link
+              href="/login"
+              className="w-full sm:w-auto h-11 px-6 rounded-lg bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-medium text-[#E2E8F0] flex items-center justify-center transition-colors"
+            >
+              Sign In to Account
+            </Link>
+          </div>
+        </div>
+
+        {/* 3 Pillars Feature Grid */}
+        <div className="max-w-5xl w-full mx-auto mt-24 grid grid-cols-1 md:grid-cols-3 gap-5 text-left relative z-10 px-2">
+          <div className="p-6 rounded-xl bg-[#111827]/80 border border-[#1F2937] backdrop-blur-sm">
+            <div className="w-10 h-10 rounded-lg bg-[#2563EB]/10 border border-[#2563EB]/20 flex items-center justify-center text-[#2563EB] mb-4">
+              <Search className="w-5 h-5" />
+            </div>
+            <h3 className="text-sm font-semibold text-white">Multi-Portal Search</h3>
+            <p className="mt-2 text-xs text-[#94A3B8] leading-relaxed">
+              Automated queries across 10+ job portals via DuckDuckGo with exponential back-off and deduplication.
+            </p>
+          </div>
+
+          <div className="p-6 rounded-xl bg-[#111827]/80 border border-[#1F2937] backdrop-blur-sm">
+            <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <h3 className="text-sm font-semibold text-white">Groq AI Document Tailoring</h3>
+            <p className="mt-2 text-xs text-[#94A3B8] leading-relaxed">
+              Generates tailored cover letters and customized resume bullet points aligned with targeted job descriptions.
+            </p>
+          </div>
+
+          <div className="p-6 rounded-xl bg-[#111827]/80 border border-[#1F2937] backdrop-blur-sm">
+            <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4">
+              <BarChart3 className="w-5 h-5" />
+            </div>
+            <h3 className="text-sm font-semibold text-white">Kanban Pipeline Telemetry</h3>
+            <p className="mt-2 text-xs text-[#94A3B8] leading-relaxed">
+              Track live application statuses from Discovered to Interview and Offer with human-in-the-loop review.
+            </p>
+          </div>
+        </div>
+
+        {/* Security & Compliance Strip */}
+        <div className="mt-16 flex items-center justify-center gap-6 text-xs text-[#64748B]">
+          <span className="flex items-center gap-1.5">
+            <Shield className="w-4 h-4 text-emerald-500" />
+            <span>Supabase RLS Protected</span>
+          </span>
+          <span>·</span>
+          <span className="flex items-center gap-1.5">
+            <Lock className="w-4 h-4 text-[#2563EB]" />
+            <span>Zero-Trust Auth Token Isolation</span>
+          </span>
+          <span>·</span>
+          <span className="flex items-center gap-1.5">
+            <Zap className="w-4 h-4 text-amber-400" />
+            <span>FastAPI v0.143 Engine</span>
+          </span>
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="w-full border-t border-[#1F2937] bg-[#0B0F19] px-6 py-6 text-center text-xs text-[#64748B]">
+        <p>© 2026 JobPilot Inc. Autonomous Talent Operations. All rights reserved.</p>
+      </footer>
     </div>
   );
 }

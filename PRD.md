@@ -15,10 +15,10 @@ Automate job discovery, resume/cover letter tailoring, and application submissio
 | **Job Search** — DuckDuckGo integration to find recent jobs | ✅ Done | 4 |
 | **AI Tailoring** — Llama 3 (Groq API) cover letters + resume bullets | ✅ Done | 4 |
 | **Job Persistence** — Save found jobs to Supabase | ✅ Done | 4 |
-| **REST API** — FastAPI endpoints for frontend integration | 🏃 In Progress | 5 |
-| **Auth** — Supabase Auth in Next.js (sign up / login / sessions) | ⬜ Planned | 6 |
-| **Dashboard** — Next.js Kanban board for application tracking | ⬜ Planned | 7 |
-| **Automation** — Playwright scripts to submit applications | ⬜ Planned | 8 |
+| **REST API** — FastAPI endpoints for frontend integration | ✅ Done | 5 |
+| **Auth** — Supabase Auth, Google/GitHub SSO, OTP & Password Reset | ✅ Done | 6 |
+| **Dashboard** — Next.js Kanban board for application tracking | 🏃 Next | 7 |
+| **Automation** — Playwright scripts to submit applications | ⬜ Planned | 8-9 |
 
 ### 4. Non-Functional Requirements
 - **Security**: `.env` excluded from git. API routes protected by Supabase JWT (Module 6).

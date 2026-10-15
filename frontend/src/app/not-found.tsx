@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowLeft, Search, Shield } from "lucide-react";
 
 export default function NotFound() {
@@ -7,12 +8,14 @@ export default function NotFound() {
       {/* Header */}
       <header className="w-full border-b border-[#1F2937] bg-[#0B0F19]/90 px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-xs tracking-wider">
-            JP
-          </div>
-          <span className="text-sm font-semibold tracking-tight text-white">
-            JobPilot <span className="text-xs font-normal text-[#94A3B8]">Talent Operations</span>
-          </span>
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="relative w-7 h-7 rounded overflow-hidden border border-[#2563EB]/40">
+              <Image src="/logo.jpg" alt="JobPilot" fill className="object-cover" />
+            </div>
+            <span className="text-sm font-semibold tracking-tight text-white">
+              JobPilot <span className="text-xs font-normal text-[#94A3B8]">Talent Operations</span>
+            </span>
+          </Link>
         </div>
       </header>
 

@@ -1,134 +1,157 @@
-# Automated Job Application Assistant
+# JobPilot — Autonomous Job Application Assistant
 
-> AI-powered job search, cover letter drafting, and application tracking.
+> **Enterprise AI Platform** for multi-portal job discovery, automated document tailoring, and end-to-end application tracking.
 
-## What it does
-
-1. **Searches** DuckDuckGo for relevant job postings (no API key needed)
-2. **Drafts** a tailored cover letter and rewritten resume bullets using Groq / Llama 3
-3. **Saves** job data to Supabase
-4. **Tracks** every application in a dashboard (Module 7 — coming soon)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.143+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Next.js](https://img.shields.io/badge/Next.js-16.4+-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
+[![Supabase](https://img.shields.io/badge/Supabase-Database%20%26%20Auth-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
+[![Python Tests](https://img.shields.io/badge/Pytest-40%20Passed-brightgreen?logo=pytest)](https://docs.pytest.org)
 
 ---
 
-## Tech Stack
+## 🚀 Key Capabilities
 
-| Layer | Technology |
-|-------|-----------|
-| AI Agent | LangGraph + Groq (Llama 3) |
-| Job Search | DuckDuckGo Search |
-| Backend API | FastAPI + Uvicorn |
-| Database | Supabase (PostgreSQL + Auth) |
-| Frontend | Next.js (TypeScript) |
-| Automation | Playwright (Module 8 — planned) |
+1. **Multi-Portal Job Search**: Autonomous search across 10+ job platforms (LinkedIn, Indeed, Greenhouse, Lever, etc.) using DuckDuckGo Search API with 3x retry exponential back-off.
+2. **AI Document Tailoring**: Llama 3 (via Groq API) crafts bespoke cover letters and targeted resume bullets matching specific job descriptions.
+3. **Enterprise Identity & Auth**:
+   - Google & GitHub Single Sign-On (SSO) with Supabase Auth.
+   - Corporate Email/Password authentication.
+   - 6-Digit Email OTP verification flow on first-time registration.
+   - Token-based self-service Password Reset (`/forgot-password` & `/reset-password`).
+4. **Hardened Security**:
+   - Zero-trust route protection in Next.js Middleware blocking all unauthenticated access to workspace pages.
+   - Pure key isolation (zero secret or LLM API keys exposed in client bundles).
+   - Supabase PostgreSQL Row Level Security (RLS) across all user tables.
+5. **Interactive Telemetry Dashboard**:
+   - Real-time application metrics, quota counters, and user session controls.
+   - Danger Zone account termination with full cascade data deletion.
 
 ---
 
-## Project Status
+## 🛠️ Tech Stack
+
+| Layer | Technology | Details |
+|---|---|---|
+| **Frontend** | Next.js 16 (App Router), React, TypeScript | Dark-mode Enterprise UI |
+| **Backend** | FastAPI + Uvicorn | Python 3.11+, Pydantic Settings |
+| **AI Engine** | LangGraph + LangChain Groq | Llama 3-8B model inference |
+| **Database** | Supabase (PostgreSQL 15+) | RLS, JWT Auth, Cascade Triggers |
+| **Search** | DuckDuckGo Search (`ddgs`) | Deduplication + Rate-limit protection |
+| **Testing** | Pytest | 40 Unit, Smoke, & Integration tests |
+
+---
+
+## 📊 Modules Status
 
 | Module | Description | Status |
-|--------|-------------|--------|
-| 1 | Project setup | ✅ Done |
-| 2 | Database schema | ✅ Done |
-| 3 | Environment variables | ✅ Done |
-| 4 | Core LangGraph agent | ✅ Done |
-| 5 | FastAPI routes + auth | 🏃 Next |
-| 6 | Supabase Auth (frontend) | ⬜ Planned |
-| 7 | Dashboard UI | ⬜ Planned |
-| 8 | Playwright automation | ⬜ Planned |
+|---|---|---|
+| **Module 1** | Monorepo Setup & Architecture | ✅ Completed |
+| **Module 2** | Supabase Database Schema & RLS | ✅ Completed |
+| **Module 3** | Environment Variables & Secrets | ✅ Completed |
+| **Module 4** | Core LangGraph AI Pipeline | ✅ Completed |
+| **Module 5** | FastAPI Backend Auth & Modular Routers | ✅ Completed (40/40 Tests Pass) |
+| **Module 6** | Frontend Auth, OTP, OAuth, & Onboarding | ✅ Completed (Build 0 Errors) |
+| **Module 7** | Smart Match Scoring & Kanban Board | 🏃 Next Milestone |
+| **Module 8** | Human-in-Loop Review & Celery Tasks | ⬜ Planned |
+| **Module 9** | Playwright Automation Engine | ⬜ Planned |
+| **Module 10** | Stripe Subscriptions & Usage Quotas | ⬜ Planned |
+| **Module 11** | Mock Interview Prep Flashcards | ⬜ Planned |
+| **Module 12** | Chrome Extension Autofill | ⬜ Planned |
 
 ---
 
-## Setup
+## 💻 Quick Start Guide
 
-### Prerequisites
+### 1. Prerequisites
 - Python 3.11+
 - Node.js 18+
-- A [Supabase](https://supabase.com) project
-- A [Groq](https://console.groq.com) API key
+- Supabase Project (`URL` & `ANON_KEY`)
+- Groq API Key (`GROQ_API_KEY`)
 
-### 1. Clone and install
+### 2. Environment Setup
 
-```bash
-git clone https://github.com/Ch-SaifUllah-Sundhu/Automated-Job-Application.git
-cd Automated-Job-Application
+**Root `.env` (Backend):**
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-supabase-anon-key
+GROQ_API_KEY=gsk_your-groq-key
 ```
 
-**Backend:**
-```bash
-python -m venv venv
-venv\Scripts\activate          # Windows
-pip install -r requirements.txt
+**Frontend `.env.local` (`frontend/.env.local`):**
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-**Frontend:**
+### 3. Run Backend
+
+```bash
+# Activate virtual environment
+venv\Scripts\activate
+
+# Start FastAPI server
+cd backend
+uvicorn main:app --reload --port 8000
+```
+- API Documentation (Swagger UI): [http://localhost:8000/docs](http://localhost:8000/docs)
+
+### 4. Run Frontend
+
 ```bash
 cd frontend
 npm install
+npm run dev
 ```
+- Web Application: [http://localhost:3000](http://localhost:3000)
 
-### 2. Configure environment
+---
 
-Copy and fill in your keys:
+## 🧪 Testing Suite
+
+Run full backend test suite:
 ```bash
-cp .env.example .env
+# Run all 40 tests
+pytest -v
+
+# Run non-integration unit tests only
+pytest -m "not integration" -v
 ```
 
-```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-anon-key
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-GROQ_API_KEY=gsk_...
-```
-
-### 3. Set up the database
-
-Run `schema.sql` in your Supabase SQL editor to create the tables.
-
-### 4. Run
-
-**Backend:**
-```bash
-cd backend
-uvicorn main:app --reload
-# API docs: http://localhost:8000/docs
-```
-
-**Frontend:**
+Run frontend production compilation check:
 ```bash
 cd frontend
-npm run dev
-# App: http://localhost:3000
+npm run build
 ```
 
 ---
 
-## Testing
-
-```bash
-# Unit + smoke tests only (no real API calls)
-pytest -m "not integration" -v
-
-# All tests including real API calls (requires valid .env)
-pytest -v
-```
-
----
-
-## Project Files
+## 📁 Repository Directory Structure
 
 ```
-backend/
-├── agent.py        ← LangGraph pipeline (Module 4)
-├── main.py         ← FastAPI app (Module 5 stub)
-└── test_agent.py   ← Full test suite
-
-frontend/           ← Next.js app (Modules 6–7)
-schema.sql          ← Supabase table definitions
-requirements.txt    ← Python dependencies
+├── backend/
+│   ├── main.py              # Application factory & router registration
+│   ├── agent.py             # LangGraph state machine & search nodes
+│   ├── config.py            # Pydantic BaseSettings validation
+│   ├── dependencies.py      # JWT authentication dependencies
+│   ├── routers/             # auth, jobs, applications, profile
+│   ├── services/            # resume parser, match scoring
+│   ├── test_agent.py        # LangGraph engine unit tests
+│   └── tests/               # Route & endpoint unit tests
+│
+├── frontend/
+│   ├── public/logo.jpg      # Official brand logo
+│   └── src/
+│       ├── middleware.ts    # Route protection & backdoor lockdown
+│       ├── app/
+│       │   ├── page.tsx     # Hero landing page
+│       │   ├── dashboard/   # Authenticated command center
+│       │   ├── onboarding/  # Candidate profile setup wizard
+│       │   ├── not-found.tsx# Custom branded 404
+│       │   └── (auth)/      # login, signup, forgot-password, reset-password
+│       ├── hooks/useAuth.ts # Global session & auth provider
+│       └── lib/api.ts       # Backend REST client
+│
+├── schema.sql               # Supabase PostgreSQL tables & RLS policies
+└── requirements.txt         # Python pinned dependencies
 ```
-
----
-
-> **For AI agents:** Read `AGENTS.md` first — it has complete codebase context, bug status, and next tasks.

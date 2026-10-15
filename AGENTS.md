@@ -301,14 +301,19 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
 - [x] `npm install @supabase/supabase-js @supabase/ssr`
 - [x] `frontend/src/lib/supabase/client.ts` — `createBrowserClient()`
 - [x] `frontend/src/lib/supabase/server.ts` — `createServerClient()` with cookie adapter
-- [x] `frontend/src/middleware.ts` — protect `/dashboard/**` routes & `/onboarding`
-- [x] `frontend/src/app/(auth)/login/page.tsx` — email/password + Google + LinkedIn OAuth
-- [x] `frontend/src/app/(auth)/signup/page.tsx` — signup + terms
-- [x] `frontend/src/app/onboarding/page.tsx` — 3-step wizard (profile → resume upload → done)
-- [x] `frontend/src/hooks/useAuth.ts` — `user`, `signIn`, `signOut`, `signInWithOAuth`
+- [x] `frontend/src/middleware.ts` — zero-trust route protection closing all unauthenticated backdoors to `/dashboard/**`, `/onboarding`, etc.
+- [x] `frontend/src/app/(auth)/login/page.tsx` — Email/password + Google & GitHub SSO + Forgot password
+- [x] `frontend/src/app/(auth)/signup/page.tsx` — Registration + Google & GitHub SSO + 6-digit OTP verification flow
+- [x] `frontend/src/app/(auth)/forgot-password/page.tsx` — Password recovery email dispatch
+- [x] `frontend/src/app/(auth)/reset-password/page.tsx` — Token-based credential reset flow
+- [x] `frontend/src/app/dashboard/page.tsx` — Authenticated workspace dashboard with session telemetry, real sign out, and danger zone account deletion
+- [x] `frontend/src/app/page.tsx` — High-conversion enterprise hero landing page with brand logo
+- [x] `frontend/src/app/not-found.tsx` — Branded dark-mode custom 404 page
+- [x] `frontend/src/hooks/useAuth.ts` — `user`, `session`, `signIn`, `signUp`, `signOut`, `signInWithOAuth`, `resetPassword`, `updatePassword`, `verifyOtp`, `resendOtp`
 - [x] `frontend/src/lib/api.ts` — centralized API client for backend communication
-- [x] `frontend/src/app/auth/callback/route.ts` — OAuth callback handler
+- [x] `frontend/src/app/auth/callback/route.ts` — OAuth callback & recovery token handler
 - [x] Verified full build with `npm run build` (0 TypeScript / Next.js errors)
+- [x] 40/40 backend tests passing cleanly (`pytest -v`)
 
 ---
 

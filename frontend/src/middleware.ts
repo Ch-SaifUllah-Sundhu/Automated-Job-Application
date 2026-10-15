@@ -35,14 +35,31 @@ export async function middleware(request: NextRequest) {
 
   const url = request.nextUrl.clone();
 
-  // Protect /dashboard and /onboarding routes for unauthenticated visitors
-  if (!user && (url.pathname.startsWith("/dashboard") || url.pathname.startsWith("/onboarding"))) {
+  // List of strictly protected routes
+  const protectedPrefixes = [
+    "/dashboard",
+    "/onboarding",
+    "/profile",
+    "/applications",
+    "/review",
+    "/billing",
+    "/interview",
+  ];
+
+  const isProtected = protectedPrefixes.some((prefix) =>
+    url.pathname.startsWith(prefix)
+  );
+
+  // Close backdoors: Block unauthenticated visitors from protected pages
+  if (!user && isProtected) {
     url.pathname = "/login";
+    url.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(url);
   }
 
-  // If user is authenticated and visits /login or /signup, direct to /dashboard
-  if (user && (url.pathname === "/login" || url.pathname === "/signup")) {
+  // Redirect authenticated users away from guest auth pages
+  const guestOnlyRoutes = ["/login", "/signup", "/forgot-password"];
+  if (user && guestOnlyRoutes.includes(url.pathname)) {
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
