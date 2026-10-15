@@ -27,6 +27,18 @@ export default function LoginPage() {
   const [oauthLoading, setOauthLoading] = useState<"google" | "linkedin" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [oauthNotice, setOauthNotice] = useState<string | null>(null);
+  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+
+  // Check URL parameters for error or success messages from redirects
+  useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlError = params.get("error");
+      const urlMsg = params.get("message");
+      if (urlError) setError(decodeURIComponent(urlError));
+      if (urlMsg) setSuccessNotice(decodeURIComponent(urlMsg));
+    }
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +126,14 @@ export default function LoginPage() {
                 Access automated job search, candidate profiling, and pipeline telemetry.
               </p>
             </div>
+
+            {/* Success Banner */}
+            {successNotice && (
+              <div className="mb-5 p-3 rounded bg-emerald-950/40 border border-emerald-800/80 flex items-start gap-2.5 text-emerald-200 text-xs">
+                <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-400" />
+                <span>{successNotice}</span>
+              </div>
+            )}
 
             {/* Error Banner */}
             {error && (
@@ -215,6 +235,12 @@ export default function LoginPage() {
                   <label className="block text-xs font-medium text-[#CBD5E1]">
                     Password
                   </label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-[11px] text-[#2563EB] hover:text-[#60A5FA] transition-colors"
+                  >
+                    Forgot password?
+                  </Link>
                 </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />

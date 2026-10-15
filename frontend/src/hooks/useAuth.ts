@@ -92,6 +92,28 @@ export function useAuth() {
     [supabase]
   );
 
+  const resetPassword = useCallback(
+    async (email: string) => {
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      });
+      if (error) throw error;
+      return data;
+    },
+    [supabase]
+  );
+
+  const updatePassword = useCallback(
+    async (newPassword: string) => {
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+      if (error) throw error;
+      return data;
+    },
+    [supabase]
+  );
+
   const getAccessToken = useCallback(async (): Promise<string | null> => {
     const {
       data: { session },
@@ -107,6 +129,8 @@ export function useAuth() {
     signUp,
     signOut,
     signInWithOAuth,
+    resetPassword,
+    updatePassword,
     getAccessToken,
   };
 }
