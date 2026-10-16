@@ -9,11 +9,9 @@ import {
   Search,
   Sparkles,
   Zap,
-  CheckCircle2,
   Lock,
-  FileText,
   BarChart3,
-  ExternalLink,
+  CheckCircle2,
 } from "lucide-react";
 
 export default function HomePage() {
@@ -24,47 +22,39 @@ export default function HomePage() {
       {/* Top Navigation */}
       <header className="w-full border-b border-[#1F2937] bg-[#0B0F19]/90 backdrop-blur-md sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-[#2563EB]/40 shadow-sm">
-            <Image
-              src="/logo.jpg"
-              alt="JobPilot Logo"
-              fill
-              className="object-cover"
-              priority
-            />
-          </div>
-          <div>
-            <span className="text-sm font-semibold tracking-tight text-white block leading-none">
-              JobPilot
-            </span>
-            <span className="text-[10px] text-[#94A3B8]">Talent Operations</span>
-          </div>
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-[#2563EB]/40 shadow-sm">
+              <Image
+                src="/logo.jpg"
+                alt="JobPilot Logo"
+                fill
+                className="object-cover"
+                priority
+              />
+            </div>
+            <div>
+              <span className="text-sm font-semibold tracking-tight text-white block leading-none">
+                JobPilot
+              </span>
+              <span className="text-[10px] text-[#94A3B8]">Talent Operations</span>
+            </div>
+          </Link>
         </div>
 
         <div className="flex items-center gap-4 text-xs">
-          <a
-            href="http://localhost:8000/docs"
-            target="_blank"
-            rel="noreferrer"
-            className="hidden sm:flex items-center gap-1 text-[#94A3B8] hover:text-white transition-colors"
-          >
-            <span>API Telemetry</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-
           {user ? (
             <Link
               href="/dashboard"
               className="flex items-center gap-1.5 h-8 px-3.5 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white transition-colors"
             >
-              <span>Go to Dashboard</span>
+              <span>Go to Workspace</span>
               <ArrowRight className="w-3 h-3" />
             </Link>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <Link
                 href="/login"
-                className="h-8 px-3 rounded bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-medium text-[#CBD5E1] flex items-center transition-colors"
+                className="h-8 px-3.5 rounded bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-medium text-[#CBD5E1] flex items-center transition-colors"
               >
                 Sign In
               </Link>
@@ -88,7 +78,7 @@ export default function HomePage() {
         <div className="max-w-3xl mx-auto relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#111827] border border-[#1F2937] text-[11px] text-[#94A3B8] mb-6">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Autonomous Application Infrastructure v0.6</span>
+            <span>AI-Driven Career Placement Platform</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white leading-tight">
@@ -99,7 +89,7 @@ export default function HomePage() {
           </h1>
 
           <p className="mt-5 text-sm sm:text-base text-[#94A3B8] max-w-xl mx-auto leading-relaxed">
-            Multi-portal scraping, semantic TF-IDF resume scoring, Groq Llama 3 document tailoring, and end-to-end telemetry—all unified in one enterprise command center.
+            Multi-portal intelligent job discovery, semantic resume matching, bespoke cover letter tailoring, and real-time application tracking—all unified in one intuitive workspace.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -107,7 +97,7 @@ export default function HomePage() {
               href={user ? "/dashboard" : "/signup"}
               className="w-full sm:w-auto h-11 px-6 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold tracking-wide flex items-center justify-center gap-2 shadow-lg shadow-[#2563EB]/25 transition-all"
             >
-              <span>{user ? "Open Workspace" : "Deploy Your Job Assistant"}</span>
+              <span>{user ? "Open Workspace" : "Start Job Assistant Free"}</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
 
@@ -128,7 +118,7 @@ export default function HomePage() {
             </div>
             <h3 className="text-sm font-semibold text-white">Multi-Portal Search</h3>
             <p className="mt-2 text-xs text-[#94A3B8] leading-relaxed">
-              Automated queries across 10+ job portals via DuckDuckGo with exponential back-off and deduplication.
+              Automated queries across 10+ job portals with automatic deduplication, intelligent salary filtering, and real-time listings.
             </p>
           </div>
 
@@ -136,9 +126,9 @@ export default function HomePage() {
             <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4">
               <Sparkles className="w-5 h-5" />
             </div>
-            <h3 className="text-sm font-semibold text-white">Groq AI Document Tailoring</h3>
+            <h3 className="text-sm font-semibold text-white">AI Document Tailoring</h3>
             <p className="mt-2 text-xs text-[#94A3B8] leading-relaxed">
-              Generates tailored cover letters and customized resume bullet points aligned with targeted job descriptions.
+              Generates customized cover letters and tailored resume bullet points calibrated precisely to target job descriptions.
             </p>
           </div>
 
@@ -146,9 +136,9 @@ export default function HomePage() {
             <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4">
               <BarChart3 className="w-5 h-5" />
             </div>
-            <h3 className="text-sm font-semibold text-white">Kanban Pipeline Telemetry</h3>
+            <h3 className="text-sm font-semibold text-white">Application Pipeline</h3>
             <p className="mt-2 text-xs text-[#94A3B8] leading-relaxed">
-              Track live application statuses from Discovered to Interview and Offer with human-in-the-loop review.
+              Track applications end-to-end from Discovered to Interview and Offer with human-in-the-loop review.
             </p>
           </div>
         </div>
@@ -157,24 +147,25 @@ export default function HomePage() {
         <div className="mt-16 flex items-center justify-center gap-6 text-xs text-[#64748B]">
           <span className="flex items-center gap-1.5">
             <Shield className="w-4 h-4 text-emerald-500" />
-            <span>Supabase RLS Protected</span>
+            <span>Encrypted Data Storage</span>
           </span>
           <span>·</span>
           <span className="flex items-center gap-1.5">
             <Lock className="w-4 h-4 text-[#2563EB]" />
-            <span>Zero-Trust Auth Token Isolation</span>
+            <span>Zero-Trust Privacy</span>
           </span>
           <span>·</span>
           <span className="flex items-center gap-1.5">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <span>FastAPI v0.143 Engine</span>
+            <CheckCircle2 className="w-4 h-4 text-blue-400" />
+            <span>Enterprise TLS 1.3</span>
           </span>
         </div>
       </main>
 
       {/* Footer */}
       <footer className="w-full border-t border-[#1F2937] bg-[#0B0F19] px-6 py-6 text-center text-xs text-[#64748B]">
-        <p>© 2026 JobPilot Inc. Autonomous Talent Operations. All rights reserved.</p>
+        <p className="text-white font-medium mb-1">JobPilot — Autonomous Talent Operations</p>
+        <p>Founder & Platform Lead: <span className="text-[#E2E8F0] font-semibold">Chaudhry Saif Ullah Sundhu</span>. All rights reserved © 2026.</p>
       </footer>
     </div>
   );

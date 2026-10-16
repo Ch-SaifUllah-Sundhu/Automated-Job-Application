@@ -100,20 +100,13 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        <div className="flex items-center gap-4 text-xs text-[#94A3B8]">
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded bg-[#111827] border border-[#1F2937]">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[11px] text-[#CBD5E1]">Operational · API v0.5</span>
-          </div>
-          <a
-            href="http://localhost:8000/docs"
-            target="_blank"
-            rel="noreferrer"
-            className="hover:text-white flex items-center gap-1 transition-colors"
+        <div className="flex items-center gap-3 text-xs">
+          <Link
+            href="/signup"
+            className="text-[#94A3B8] hover:text-white transition-colors"
           >
-            <span>API Docs</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
+            Create account →
+          </Link>
         </div>
       </header>
 
