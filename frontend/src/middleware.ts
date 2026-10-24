@@ -57,9 +57,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from guest auth pages
+  // Redirect verified authenticated users away from guest auth pages
   const guestOnlyRoutes = ["/login", "/signup", "/forgot-password"];
+  const isVerifyFlow = url.searchParams.has("step") || url.searchParams.has("verify") || url.searchParams.has("email");
+  const isEmailConfirmed = Boolean(user?.email_confirmed_at);
+
   if (user && guestOnlyRoutes.includes(url.pathname)) {
+    // If user is accessing signup to verify or their email is not yet confirmed, let them stay
+    if (url.pathname === "/signup" && (isVerifyFlow || !isEmailConfirmed)) {
+      return supabaseResponse;
+    }
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }

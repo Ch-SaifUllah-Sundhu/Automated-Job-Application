@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -13,9 +12,9 @@ import {
   Loader2,
   Shield,
   CheckCircle2,
+  Layers,
   KeyRound,
-  ExternalLink,
-  Info,
+  Sparkles,
 } from "lucide-react";
 
 export default function LoginPage() {
@@ -25,12 +24,12 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<"google" | "github" | "linkedin" | null>(null);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "github" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [oauthNotice, setOauthNotice] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
 
-  // Check URL parameters for error or success messages from redirects
+  // Check URL parameters for messages from redirects
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -52,7 +51,11 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message);
+        if (err.message.toLowerCase().includes("email not confirmed")) {
+          setError("Your email address is not yet verified. Please enter your 6-digit confirmation code.");
+        } else {
+          setError(err.message);
+        }
       } else {
         setError("Invalid email or password. Please verify credentials.");
       }
@@ -61,22 +64,22 @@ export default function LoginPage() {
     }
   };
 
-  const handleOAuth = async (provider: "google" | "github" | "linkedin_oidc") => {
+  const handleOAuth = async (provider: "google" | "github") => {
     setError(null);
     setOauthNotice(null);
-    setOauthLoading(provider === "google" ? "google" : provider === "github" ? "github" : "linkedin");
+    setOauthLoading(provider);
     try {
       await signInWithOAuth(provider);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
-      const providerName = provider === "google" ? "Google" : provider === "github" ? "GitHub" : "LinkedIn";
+      const providerName = provider === "google" ? "Google" : "GitHub";
       if (
         msg.includes("provider is not enabled") ||
         msg.includes("validation_failed") ||
         msg.includes("Unsupported provider")
       ) {
         setOauthNotice(
-          `${providerName} OAuth provider is currently disabled in your Supabase project settings. Please sign in with your corporate email/password below or enable the provider in your Supabase dashboard (Authentication > Providers).`
+          `${providerName} SSO provider is not yet active in Supabase. Please sign in with email and password below.`
         );
       } else {
         setError(msg || "OAuth authentication failed.");
@@ -87,12 +90,12 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-full bg-[#0B0F19] text-[#E2E8F0] flex flex-col font-sans selection:bg-[#2563EB]/30 selection:text-white">
-      {/* Top Enterprise Header */}
-      <header className="w-full border-b border-[#1F2937] bg-[#0B0F19]/90 px-6 py-3.5 flex items-center justify-between z-20">
+      {/* Top Header - Consistent with Onboarding */}
+      <header className="w-full border-b border-[#1F2937] bg-[#0B0F19]/90 px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="relative w-7 h-7 rounded overflow-hidden border border-[#2563EB]/40">
-              <Image src="/logo.jpg" alt="JobPilot" fill className="object-cover" />
+          <Link href="/" className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-xs tracking-wider">
+              JP
             </div>
             <span className="text-sm font-semibold tracking-tight text-white">
               JobPilot <span className="text-xs font-normal text-[#94A3B8]">Talent Operations</span>
@@ -111,13 +114,13 @@ export default function LoginPage() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 flex items-center justify-center px-4 py-12 relative">
-        <div className="w-full max-w-[440px]">
+      <main className="flex-1 flex items-center justify-center px-4 py-10">
+        <div className="w-full max-w-[560px]">
           {/* Card */}
           <div className="bg-[#111827] border border-[#1F2937] rounded-lg p-8 shadow-xl">
             <div className="mb-6">
-              <h1 className="text-xl font-semibold tracking-tight text-white">
-                Sign in to workspace
+              <h1 className="text-lg font-semibold tracking-tight text-white">
+                Sign In to Workspace
               </h1>
               <p className="mt-1 text-xs text-[#94A3B8]">
                 Access automated job search, candidate profiling, and pipeline telemetry.
@@ -134,30 +137,37 @@ export default function LoginPage() {
 
             {/* Error Banner */}
             {error && (
-              <div className="mb-5 p-3 rounded bg-red-950/40 border border-red-800/80 flex items-start gap-2.5 text-red-300 text-xs">
-                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
-                <span>{error}</span>
+              <div className="mb-5 p-3 rounded bg-red-950/40 border border-red-800/80 flex items-start justify-between gap-2.5 text-red-300 text-xs">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
+                  <span>{error}</span>
+                </div>
+                {error.includes("confirmation code") && (
+                  <Link
+                    href={`/signup?step=2&email=${encodeURIComponent(email)}`}
+                    className="underline text-red-200 hover:text-white whitespace-nowrap font-medium"
+                  >
+                    Enter Code →
+                  </Link>
+                )}
               </div>
             )}
 
-            {/* OAuth Notice Banner */}
+            {/* OAuth Notice */}
             {oauthNotice && (
               <div className="mb-5 p-3 rounded bg-amber-950/40 border border-amber-800/80 flex items-start gap-2.5 text-amber-200 text-xs">
-                <Info className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
-                <div className="space-y-1">
-                  <p className="font-medium text-amber-300">Provider Notice</p>
-                  <p className="text-[11px] leading-relaxed text-amber-200/90">{oauthNotice}</p>
-                </div>
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
+                <span>{oauthNotice}</span>
               </div>
             )}
 
-            {/* SSO / OAuth Buttons */}
+            {/* SSO Buttons */}
             <div className="grid grid-cols-2 gap-2.5 mb-5">
               <button
                 type="button"
                 onClick={() => handleOAuth("google")}
                 disabled={loading || oauthLoading !== null}
-                className="flex items-center justify-center gap-2 h-9 px-3 rounded bg-[#0B0F19] hover:bg-[#172033] border border-[#1F2937] hover:border-[#374151] text-xs font-medium text-[#E2E8F0] transition-colors cursor-pointer disabled:opacity-50"
+                className="flex items-center justify-center gap-2 h-9 px-3 rounded bg-[#0B0F19] hover:bg-[#161F33] border border-[#1F2937] hover:border-[#374151] text-xs font-medium text-[#E2E8F0] transition-colors cursor-pointer disabled:opacity-50"
               >
                 {oauthLoading === "google" ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
@@ -188,7 +198,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => handleOAuth("github")}
                 disabled={loading || oauthLoading !== null}
-                className="flex items-center justify-center gap-2 h-9 px-3 rounded bg-[#0B0F19] hover:bg-[#172033] border border-[#1F2937] hover:border-[#374151] text-xs font-medium text-[#E2E8F0] transition-colors cursor-pointer disabled:opacity-50"
+                className="flex items-center justify-center gap-2 h-9 px-3 rounded bg-[#0B0F19] hover:bg-[#161F33] border border-[#1F2937] hover:border-[#374151] text-xs font-medium text-[#E2E8F0] transition-colors cursor-pointer disabled:opacity-50"
               >
                 {oauthLoading === "github" ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
@@ -203,13 +213,13 @@ export default function LoginPage() {
 
             <div className="relative flex items-center justify-center my-5">
               <div className="border-t border-[#1F2937] w-full" />
-              <span className="bg-[#111827] px-2.5 text-[10px] font-semibold tracking-wider uppercase text-[#64748B] absolute">
-                or corporate email
+              <span className="bg-[#111827] px-3 text-[10px] font-semibold tracking-wider uppercase text-[#64748B] absolute">
+                or sign in with password
               </span>
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-medium text-[#CBD5E1] mb-1.5">
                   Email Address
@@ -221,7 +231,7 @@ export default function LoginPage() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="name@company.com"
+                    placeholder="saif@example.com"
                     className="w-full h-9 pl-9 pr-3 bg-[#0B0F19] border border-[#1F2937] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded text-xs text-white placeholder-[#64748B] outline-none transition-colors"
                   />
                 </div>
@@ -252,37 +262,39 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading || oauthLoading !== null}
-                className="w-full h-9 mt-2 rounded bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold tracking-wide flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Authenticating...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Sign In</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </>
-                )}
-              </button>
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={loading || oauthLoading !== null}
+                  className="w-full h-9 rounded bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold tracking-wide flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Authenticating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Sign In to Workspace</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              </div>
             </form>
 
-            <div className="mt-6 pt-5 border-t border-[#1F2937] flex items-center justify-between text-xs text-[#94A3B8]">
-              <span>New organization?</span>
+            <div className="mt-5 pt-4 border-t border-[#1F2937] flex items-center justify-between text-xs text-[#94A3B8]">
+              <span>Have an unverified OTP code?</span>
               <Link
-                href="/signup"
+                href="/signup?step=2"
                 className="text-[#2563EB] hover:text-[#60A5FA] font-medium transition-colors"
               >
-                Register workspace →
+                Enter 6-digit OTP code →
               </Link>
             </div>
           </div>
 
-          {/* Compliance & Security Trust Strip */}
+          {/* Compliance & Security Strip - Exact Onboarding Style */}
           <div className="mt-6 flex items-center justify-center gap-4 text-[11px] text-[#64748B]">
             <span className="flex items-center gap-1.5">
               <Shield className="w-3.5 h-3.5 text-emerald-500" />
@@ -295,8 +307,8 @@ export default function LoginPage() {
             </span>
             <span>·</span>
             <span className="flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5 text-[#94A3B8]" />
-              <span>Role-Based Access</span>
+              <Layers className="w-3.5 h-3.5 text-[#94A3B8]" />
+              <span>Zero-Trust Auth</span>
             </span>
           </div>
         </div>

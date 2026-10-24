@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import {
   ArrowRight,
+  ArrowLeft,
   Mail,
   Lock,
   User,
@@ -15,34 +15,60 @@ import {
   Shield,
   CheckCircle2,
   KeyRound,
-  ExternalLink,
-  Info,
   RotateCcw,
-  ArrowLeft,
+  Layers,
+  Sparkles,
 } from "lucide-react";
 
 export default function SignupPage() {
   const router = useRouter();
   const { signUp, signInWithOAuth, verifyOtp, resendOtp } = useAuth();
 
-  const [step, setStep] = useState<"form" | "otp">("form");
+  const [step, setStep] = useState<1 | 2>(1);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState<"google" | "github" | "linkedin" | null>(null);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "github" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [oauthNotice, setOauthNotice] = useState<string | null>(null);
 
-  // OTP State
-  const [otpCode, setOtpCode] = useState("");
+  // 6-Digit OTP State
+  const [otpDigits, setOtpDigits] = useState<string[]>(["", "", "", "", "", ""]);
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpNotice, setOtpNotice] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
 
+  const digitRefs = [
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+  ];
+
+  // Read URL parameters on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlEmail = params.get("email");
+      const urlStep = params.get("step");
+      const urlVerify = params.get("verify");
+
+      if (urlEmail) setEmail(urlEmail);
+      if (urlStep === "2" || urlVerify === "true") {
+        setStep(2);
+        setOtpNotice("Enter your 6-digit confirmation code below.");
+      }
+    }
+  }, []);
+
+  // Cooldown timer
   useEffect(() => {
     if (cooldown > 0) {
       const timer = setTimeout(() => setCooldown((prev) => prev - 1), 1000);
@@ -50,41 +76,107 @@ export default function SignupPage() {
     }
   }, [cooldown]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setOauthNotice(null);
 
     if (!termsAccepted) {
-      setError("Please accept the terms of service and compliance agreement to register.");
+      setError("Please accept the terms of service and acceptable use agreement to register.");
       return;
     }
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+      setError("Password must be at least 6 characters in length.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const data = await signUp(email, password, fullName);
-      if (data.session) {
-        // Direct session created (if email confirmation is turned off in Supabase)
-        router.push("/onboarding");
-      } else {
-        // Email confirmation is required! Show OTP step
-        setStep("otp");
-        setCooldown(60);
-      }
+      await signUp(email, password, fullName);
+      // ALWAYS advance to Step 2 for 6-digit OTP verification
+      setStep(2);
+      setCooldown(60);
+      setOtpNotice(`A 6-digit verification code has been dispatched to ${email}. Check your inbox or spam folder.`);
+      setTimeout(() => {
+        digitRefs[0].current?.focus();
+      }, 100);
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(err.message);
+        if (err.message.toLowerCase().includes("already registered")) {
+          // Allow existing user to verify code directly
+          setStep(2);
+          setCooldown(60);
+          setOtpNotice(`An account already exists for ${email}. Enter the 6-digit confirmation code to verify, or sign in.`);
+          setTimeout(() => {
+            digitRefs[0].current?.focus();
+          }, 100);
+        } else {
+          setError(err.message);
+        }
       } else {
-        setError("Account creation failed. Please try again.");
+        setError("Account registration failed. Please verify your credentials.");
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDigitChange = (index: number, val: string) => {
+    // Only accept numeric digit
+    const cleaned = val.replace(/\D/g, "");
+    if (!cleaned) {
+      const nextDigits = [...otpDigits];
+      nextDigits[index] = "";
+      setOtpDigits(nextDigits);
+      return;
+    }
+
+    // If user pasted multi digits into one box
+    if (cleaned.length > 1) {
+      const nextDigits = [...otpDigits];
+      for (let i = 0; i < 6; i++) {
+        if (i < cleaned.length) {
+          nextDigits[i] = cleaned[i];
+        }
+      }
+      setOtpDigits(nextDigits);
+      const nextIndex = Math.min(cleaned.length, 5);
+      digitRefs[nextIndex].current?.focus();
+      return;
+    }
+
+    // Single digit
+    const nextDigits = [...otpDigits];
+    nextDigits[index] = cleaned[cleaned.length - 1];
+    setOtpDigits(nextDigits);
+
+    // Auto focus next input
+    if (index < 5 && cleaned) {
+      digitRefs[index + 1].current?.focus();
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace" && !otpDigits[index] && index > 0) {
+      digitRefs[index - 1].current?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "");
+    if (pasted) {
+      const nextDigits = [...otpDigits];
+      for (let i = 0; i < 6; i++) {
+        if (i < pasted.length) {
+          nextDigits[i] = pasted[i];
+        }
+      }
+      setOtpDigits(nextDigits);
+      const nextIndex = Math.min(pasted.length, 5);
+      digitRefs[nextIndex].current?.focus();
     }
   };
 
@@ -93,21 +185,22 @@ export default function SignupPage() {
     setOtpError(null);
     setResendNotice(null);
 
-    if (otpCode.trim().length < 6) {
-      setOtpError("Please enter the complete 6-digit verification code.");
+    const fullCode = otpDigits.join("");
+    if (fullCode.length < 6) {
+      setOtpError("Please enter all 6 digits of your confirmation code.");
       return;
     }
 
     setOtpLoading(true);
 
     try {
-      await verifyOtp(email, otpCode.trim(), "signup");
+      await verifyOtp(email, fullCode, "signup");
       router.push("/onboarding");
     } catch (err: unknown) {
       if (err instanceof Error) {
         setOtpError(err.message);
       } else {
-        setOtpError("Invalid verification code. Please check your email or request a new code.");
+        setOtpError("Invalid verification code. Please check your inbox or request a new code.");
       }
     } finally {
       setOtpLoading(false);
@@ -122,35 +215,35 @@ export default function SignupPage() {
 
     try {
       await resendOtp(email, "signup");
-      setResendNotice("A fresh 6-digit confirmation code has been dispatched to your email.");
+      setResendNotice("A new 6-digit confirmation code has been dispatched to your email.");
       setCooldown(60);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setOtpError(err.message);
       } else {
-        setOtpError("Failed to resend confirmation code. Please try again.");
+        setOtpError("Unable to resend confirmation code. Please try again shortly.");
       }
     } finally {
       setResending(false);
     }
   };
 
-  const handleOAuth = async (provider: "google" | "github" | "linkedin_oidc") => {
+  const handleOAuth = async (provider: "google" | "github") => {
     setError(null);
     setOauthNotice(null);
-    setOauthLoading(provider === "google" ? "google" : provider === "github" ? "github" : "linkedin");
+    setOauthLoading(provider);
     try {
       await signInWithOAuth(provider);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
-      const providerName = provider === "google" ? "Google" : provider === "github" ? "GitHub" : "LinkedIn";
+      const providerName = provider === "google" ? "Google" : "GitHub";
       if (
         msg.includes("provider is not enabled") ||
         msg.includes("validation_failed") ||
         msg.includes("Unsupported provider")
       ) {
         setOauthNotice(
-          `${providerName} OAuth provider is currently disabled in your Supabase project settings. Please sign up using your email and password below or enable the provider in your Supabase dashboard (Authentication > Providers).`
+          `${providerName} SSO provider is not yet active in Supabase. Please sign up with email and password below.`
         );
       } else {
         setError(msg || "OAuth registration failed.");
@@ -161,12 +254,12 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen w-full bg-[#0B0F19] text-[#E2E8F0] flex flex-col font-sans selection:bg-[#2563EB]/30 selection:text-white">
-      {/* Top Enterprise Header */}
-      <header className="w-full border-b border-[#1F2937] bg-[#0B0F19]/90 px-6 py-3.5 flex items-center justify-between z-20">
+      {/* Top Header - Consistent with Onboarding */}
+      <header className="w-full border-b border-[#1F2937] bg-[#0B0F19]/90 px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="relative w-7 h-7 rounded overflow-hidden border border-[#2563EB]/40">
-              <Image src="/logo.jpg" alt="JobPilot" fill className="object-cover" />
+          <Link href="/" className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-xs tracking-wider">
+              JP
             </div>
             <span className="text-sm font-semibold tracking-tight text-white">
               JobPilot <span className="text-xs font-normal text-[#94A3B8]">Talent Operations</span>
@@ -174,30 +267,56 @@ export default function SignupPage() {
           </Link>
         </div>
 
-        <div className="flex items-center gap-3 text-xs">
-          <Link
-            href="/login"
-            className="text-[#94A3B8] hover:text-white transition-colors"
-          >
-            Existing account? Sign in →
-          </Link>
+        <div className="flex items-center gap-3 text-xs text-[#94A3B8]">
+          <span className="text-[11px] text-[#94A3B8]">Candidate Registration</span>
+          <span>·</span>
+          <span className="text-[#CBD5E1] font-mono">Stage {step}/2</span>
         </div>
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 flex items-center justify-center px-4 py-12 relative">
-        <div className="w-full max-w-[460px]">
-          {/* Card */}
+      <main className="flex-1 flex items-center justify-center px-4 py-10">
+        <div className="w-full max-w-[560px]">
+          {/* Stepper Indicator - Exact Onboarding Style */}
+          <div className="grid grid-cols-2 gap-2 mb-6">
+            <div
+              className={`h-1.5 rounded-full transition-colors ${
+                step >= 1 ? "bg-[#2563EB]" : "bg-[#1F2937]"
+              }`}
+            />
+            <div
+              className={`h-1.5 rounded-full transition-colors ${
+                step >= 2 ? "bg-[#2563EB]" : "bg-[#1F2937]"
+              }`}
+            />
+          </div>
+
+          {/* Wizard Card */}
           <div className="bg-[#111827] border border-[#1F2937] rounded-lg p-8 shadow-xl">
-            {step === "form" ? (
-              <>
-                <div className="mb-6">
-                  <h1 className="text-xl font-semibold tracking-tight text-white">
-                    Register enterprise workspace
-                  </h1>
-                  <p className="mt-1 text-xs text-[#94A3B8]">
-                    Setup your profile to begin automated pipeline discovery and document tailoring.
-                  </p>
+            {step === 1 ? (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h1 className="text-lg font-semibold tracking-tight text-white">
+                      Step 1: Create Candidate Account
+                    </h1>
+                    <p className="mt-1 text-xs text-[#94A3B8]">
+                      Establish your credentials to access automated job search and resume tailoring.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!email) {
+                        setError("Please enter your email above first to access the OTP verification step.");
+                      } else {
+                        setStep(2);
+                      }
+                    }}
+                    className="text-[11px] text-[#2563EB] hover:text-[#60A5FA] font-medium transition-colors cursor-pointer"
+                  >
+                    Have OTP code? →
+                  </button>
                 </div>
 
                 {/* Error Banner */}
@@ -208,24 +327,21 @@ export default function SignupPage() {
                   </div>
                 )}
 
-                {/* OAuth Notice Banner */}
+                {/* OAuth Notice */}
                 {oauthNotice && (
                   <div className="mb-5 p-3 rounded bg-amber-950/40 border border-amber-800/80 flex items-start gap-2.5 text-amber-200 text-xs">
-                    <Info className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
-                    <div className="space-y-1">
-                      <p className="font-medium text-amber-300">Provider Notice</p>
-                      <p className="text-[11px] leading-relaxed text-amber-200/90">{oauthNotice}</p>
-                    </div>
+                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
+                    <span>{oauthNotice}</span>
                   </div>
                 )}
 
-                {/* SSO / OAuth Buttons */}
+                {/* SSO Buttons */}
                 <div className="grid grid-cols-2 gap-2.5 mb-5">
                   <button
                     type="button"
                     onClick={() => handleOAuth("google")}
                     disabled={loading || oauthLoading !== null}
-                    className="flex items-center justify-center gap-2 h-9 px-3 rounded bg-[#0B0F19] hover:bg-[#172033] border border-[#1F2937] hover:border-[#374151] text-xs font-medium text-[#E2E8F0] transition-colors cursor-pointer disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 h-9 px-3 rounded bg-[#0B0F19] hover:bg-[#161F33] border border-[#1F2937] hover:border-[#374151] text-xs font-medium text-[#E2E8F0] transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {oauthLoading === "google" ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
@@ -256,7 +372,7 @@ export default function SignupPage() {
                     type="button"
                     onClick={() => handleOAuth("github")}
                     disabled={loading || oauthLoading !== null}
-                    className="flex items-center justify-center gap-2 h-9 px-3 rounded bg-[#0B0F19] hover:bg-[#172033] border border-[#1F2937] hover:border-[#374151] text-xs font-medium text-[#E2E8F0] transition-colors cursor-pointer disabled:opacity-50"
+                    className="flex items-center justify-center gap-2 h-9 px-3 rounded bg-[#0B0F19] hover:bg-[#161F33] border border-[#1F2937] hover:border-[#374151] text-xs font-medium text-[#E2E8F0] transition-colors cursor-pointer disabled:opacity-50"
                   >
                     {oauthLoading === "github" ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
@@ -271,13 +387,13 @@ export default function SignupPage() {
 
                 <div className="relative flex items-center justify-center my-5">
                   <div className="border-t border-[#1F2937] w-full" />
-                  <span className="bg-[#111827] px-2.5 text-[10px] font-semibold tracking-wider uppercase text-[#64748B] absolute">
-                    or account credentials
+                  <span className="bg-[#111827] px-3 text-[10px] font-semibold tracking-wider uppercase text-[#64748B] absolute">
+                    or register with email
                   </span>
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="space-y-3.5">
+                <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
                   <div>
                     <label className="block text-xs font-medium text-[#CBD5E1] mb-1.5">
                       Full Name
@@ -289,7 +405,7 @@ export default function SignupPage() {
                         required
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
-                        placeholder="Saif Ullah Sundhu"
+                        placeholder="Chaudhry Saif Ullah"
                         className="w-full h-9 pl-9 pr-3 bg-[#0B0F19] border border-[#1F2937] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded text-xs text-white placeholder-[#64748B] outline-none transition-colors"
                       />
                     </div>
@@ -297,7 +413,7 @@ export default function SignupPage() {
 
                   <div>
                     <label className="block text-xs font-medium text-[#CBD5E1] mb-1.5">
-                      Work Email Address
+                      Email Address
                     </label>
                     <div className="relative">
                       <Mail className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
@@ -314,7 +430,7 @@ export default function SignupPage() {
 
                   <div>
                     <label className="block text-xs font-medium text-[#CBD5E1] mb-1.5">
-                      Password (minimum 6 characters)
+                      Password (min. 6 characters)
                     </label>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
@@ -339,30 +455,32 @@ export default function SignupPage() {
                       className="mt-0.5 w-3.5 h-3.5 rounded bg-[#0B0F19] border-[#1F2937] text-[#2563EB] focus:ring-[#2563EB] cursor-pointer"
                     />
                     <label htmlFor="terms" className="text-[11px] text-[#94A3B8] leading-tight cursor-pointer">
-                      I agree to the Terms of Service, Acceptable Use Policy, and Data Protection terms.
+                      I accept the Terms of Service, Acceptable Use Policy, and Candidate Data Protection standards.
                     </label>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={loading || oauthLoading !== null}
-                    className="w-full h-9 mt-3 rounded bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold tracking-wide flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Sending verification code...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Create Account</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </>
-                    )}
-                  </button>
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={loading || oauthLoading !== null}
+                      className="w-full h-9 rounded bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold tracking-wide flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Generating Verification OTP...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Continue to OTP Verification</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </form>
 
-                <div className="mt-6 pt-5 border-t border-[#1F2937] flex items-center justify-between text-xs text-[#94A3B8]">
+                <div className="mt-5 pt-4 border-t border-[#1F2937] flex items-center justify-between text-xs text-[#94A3B8]">
                   <span>Existing account?</span>
                   <Link
                     href="/login"
@@ -371,93 +489,112 @@ export default function SignupPage() {
                     Sign in to workspace →
                   </Link>
                 </div>
-              </>
+              </div>
             ) : (
-              /* OTP Verification Step */
-              <div>
-                <div className="flex items-center gap-2 mb-2">
+              /* STEP 2: MANDATORY 6-DIGIT OTP VERIFICATION */
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setStep("form")}
-                    className="text-[#94A3B8] hover:text-white transition-colors"
+                    onClick={() => setStep(1)}
+                    className="text-[#94A3B8] hover:text-white transition-colors p-1 rounded"
+                    title="Change details"
                   >
-                    <ArrowLeft className="w-4 h-4" />
+                    <ArrowLeft className="w-3.5 h-3.5" />
                   </button>
-                  <span className="text-xs text-[#94A3B8]">Step 2 of 2</span>
+                  <span className="text-xs text-[#94A3B8]">Step 2 of 2: Security Verification</span>
                 </div>
 
-                <h1 className="text-xl font-semibold tracking-tight text-white">
-                  Verify your email
-                </h1>
-                <p className="mt-1 text-xs text-[#94A3B8] leading-relaxed">
-                  We have dispatched a 6-digit confirmation code to <strong className="text-white">{email}</strong>. Enter the code below to activate your account.
-                </p>
+                <div>
+                  <h1 className="text-lg font-semibold tracking-tight text-white">
+                    Enter 6-Digit Verification Code
+                  </h1>
+                  <p className="mt-1 text-xs text-[#94A3B8] leading-relaxed">
+                    A confirmation code was dispatched to <strong className="text-white">{email}</strong>. Enter the 6 digits below to verify your account.
+                  </p>
+                </div>
 
                 {/* Error Banner */}
                 {otpError && (
-                  <div className="mt-4 p-3 rounded bg-red-950/40 border border-red-800/80 flex items-start gap-2.5 text-red-300 text-xs">
+                  <div className="p-3 rounded bg-red-950/40 border border-red-800/80 flex items-start gap-2.5 text-red-300 text-xs">
                     <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-400" />
                     <span>{otpError}</span>
                   </div>
                 )}
 
+                {/* Info / Notice */}
+                {otpNotice && !otpError && (
+                  <div className="p-3 rounded bg-[#0B0F19] border border-[#2563EB]/40 flex items-start gap-2.5 text-[#94A3B8] text-xs">
+                    <Sparkles className="w-4 h-4 mt-0.5 shrink-0 text-[#2563EB]" />
+                    <span>{otpNotice}</span>
+                  </div>
+                )}
+
                 {/* Resend Notice */}
                 {resendNotice && (
-                  <div className="mt-4 p-3 rounded bg-emerald-950/40 border border-emerald-800/80 flex items-start gap-2.5 text-emerald-200 text-xs">
+                  <div className="p-3 rounded bg-emerald-950/40 border border-emerald-800/80 flex items-start gap-2.5 text-emerald-200 text-xs">
                     <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-400" />
                     <span>{resendNotice}</span>
                   </div>
                 )}
 
-                <form onSubmit={handleVerifyOtp} className="mt-6 space-y-4">
+                <form onSubmit={handleVerifyOtp} className="space-y-5 pt-2">
                   <div>
-                    <label className="block text-xs font-medium text-[#CBD5E1] mb-2 text-center">
-                      6-Digit Verification Code
+                    <label className="block text-xs font-medium text-[#CBD5E1] mb-2.5 text-center">
+                      6-Digit Confirmation PIN
                     </label>
-                    <div className="flex justify-center">
-                      <input
-                        type="text"
-                        maxLength={6}
-                        autoFocus
-                        required
-                        value={otpCode}
-                        onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                        placeholder="••••••"
-                        className="w-48 h-12 text-center text-xl font-mono tracking-[0.5em] bg-[#0B0F19] border border-[#1F2937] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded text-white outline-none transition-colors"
-                      />
+                    
+                    {/* 6 High-Fidelity Discrete OTP Digit Boxes */}
+                    <div className="flex items-center justify-center gap-2 sm:gap-3" onPaste={handlePaste}>
+                      {otpDigits.map((digit, idx) => (
+                        <input
+                          key={idx}
+                          ref={digitRefs[idx]}
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(e) => handleDigitChange(idx, e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(idx, e)}
+                          className="w-10 h-12 sm:w-11 sm:h-12 text-center text-lg sm:text-xl font-bold font-mono bg-[#0B0F19] border border-[#1F2937] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded text-white outline-none transition-colors"
+                        />
+                      ))}
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={otpLoading || otpCode.length < 6}
-                    className="w-full h-9 rounded bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold tracking-wide flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {otpLoading ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Verifying code...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Verify & Enter Workspace</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </>
-                    )}
-                  </button>
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={otpLoading || otpDigits.join("").length < 6}
+                      className="w-full h-9 rounded bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold tracking-wide flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {otpLoading ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Verifying Account...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Verify & Proceed to Onboarding</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </form>
 
-                <div className="mt-6 pt-5 border-t border-[#1F2937] flex items-center justify-between text-xs text-[#94A3B8]">
+                <div className="mt-4 pt-4 border-t border-[#1F2937] flex items-center justify-between text-xs text-[#94A3B8]">
                   <span>Didn't receive code?</span>
                   <button
                     type="button"
                     onClick={handleResendOtp}
                     disabled={resending || cooldown > 0}
-                    className="text-[#2563EB] hover:text-[#60A5FA] font-medium transition-colors flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                    className="text-[#2563EB] hover:text-[#60A5FA] font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >
                     <RotateCcw className="w-3 h-3" />
                     <span>
-                      {cooldown > 0 ? `Resend code (${cooldown}s)` : "Resend code"}
+                      {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend code"}
                     </span>
                   </button>
                 </div>
@@ -465,7 +602,7 @@ export default function SignupPage() {
             )}
           </div>
 
-          {/* Compliance & Security Trust Strip */}
+          {/* Compliance & Security Strip - Exact Onboarding Style */}
           <div className="mt-6 flex items-center justify-center gap-4 text-[11px] text-[#64748B]">
             <span className="flex items-center gap-1.5">
               <Shield className="w-3.5 h-3.5 text-emerald-500" />
@@ -478,7 +615,7 @@ export default function SignupPage() {
             </span>
             <span>·</span>
             <span className="flex items-center gap-1.5">
-              <KeyRound className="w-3.5 h-3.5 text-[#94A3B8]" />
+              <Layers className="w-3.5 h-3.5 text-[#94A3B8]" />
               <span>Zero-Trust Auth</span>
             </span>
           </div>
