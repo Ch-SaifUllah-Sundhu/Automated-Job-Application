@@ -47,6 +47,7 @@ graph TD
 - [x] **Credential Recovery**: Full `/forgot-password` and `/reset-password` self-service pages.
 - [x] **Design & Branding**: Official JobPilot logo, custom 404 page, and high-conversion hero landing page.
 - [x] **Zero Hydration Errors**: Full Next.js production build passing with 0 errors (`npm run build`).
+- [x] **Next.js Security Upgrade**: Upgraded Next.js from 16.4.0 to 16.4.3 with `experimental.agentUpgrade = "security"` resolving security advisory.
 
 ### 🏃 Phase 4: Job Dashboard & Match Scoring (Module 7 — Up Next)
 - [ ] **TF-IDF Match Scorer**: Scikit-learn + NLTK cosine similarity calculation between candidate resumes and job postings.
