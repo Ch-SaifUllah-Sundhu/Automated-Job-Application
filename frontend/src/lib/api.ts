@@ -92,6 +92,22 @@ export interface ApplicationItem {
   created_at?: string | null;
   match_score?: number | null;
   missing_skills?: string[] | null;
+  missing_fields?: string[] | null;
+}
+
+export interface AutomationLogItem {
+  id?: string;
+  event: string;
+  detail?: string | null;
+  screenshot_url?: string | null;
+  created_at?: string | null;
+}
+
+export interface ApplicationDetailItem extends ApplicationItem {
+  job_description?: string | null;
+  job_location?: string | null;
+  required_skills?: string | null;
+  logs?: AutomationLogItem[] | null;
 }
 
 export interface JobSearchResponse {
@@ -214,4 +230,39 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
+
+  /**
+   * Module 8: Retrieves application detail with job info and automation logs.
+   */
+  getApplication: (token: string, id: string): Promise<ApplicationDetailItem> =>
+    request<ApplicationDetailItem>(`/applications/${id}`, { token }),
+
+  /**
+   * Module 8: Human-in-the-loop review updates (cover letter, bullets, review status).
+   */
+  updateReview: (
+    token: string,
+    id: string,
+    data: { cover_letter?: string; tailored_resume?: string; review_status?: string }
+  ): Promise<ApplicationDetailItem> =>
+    request<ApplicationDetailItem>(`/applications/${id}/review`, {
+      token,
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  /**
+   * Module 8: Approves application and queues background submission worker.
+   */
+  approveApplication: (token: string, id: string): Promise<ApplicationDetailItem> =>
+    request<ApplicationDetailItem>(`/applications/${id}/approve`, {
+      token,
+      method: "PATCH",
+    }),
+
+  /**
+   * Module 8: Fetches execution audit trail events from automation_logs.
+   */
+  getApplicationLogs: (token: string, id: string): Promise<AutomationLogItem[]> =>
+    request<AutomationLogItem[]>(`/applications/${id}/logs`, { token }),
 };

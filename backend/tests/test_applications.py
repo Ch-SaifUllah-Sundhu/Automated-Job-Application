@@ -168,3 +168,128 @@ def test_update_status_success():
         assert resp.json()["status"] == "Interview"
     finally:
         app.dependency_overrides.clear()
+
+
+def test_get_application_details_success():
+    """Module 8: retrieve application with full job and log telemetry."""
+    mock_user = {"id": "user-456", "email": "dev@example.com"}
+    mock_sb = MagicMock()
+    mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {
+            "id": "app-001",
+            "job_id": "job-101",
+            "status": "Found",
+            "review_status": "pending",
+            "cover_letter": "Tailored cover letter text",
+            "tailored_resume": "• Bullet 1",
+            "applied_at": None,
+            "created_at": "2026-10-11T12:00:00Z",
+            "match_score": 88.5,
+            "missing_skills": ["Kubernetes"],
+            "missing_fields": ["phone"],
+            "jobs": {
+                "title": "Backend Architect",
+                "company": "CloudCorp",
+                "url": "https://example.com/job-101",
+                "description": "Looking for a seasoned architect...",
+                "required_skills": "Python, FastAPI, AWS",
+            },
+        }
+    ]
+    # For logs select
+    mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = [
+        {
+            "id": "log-001",
+            "event": "started",
+            "detail": "Automation scheduled",
+            "created_at": "2026-10-11T12:01:00Z",
+        }
+    ]
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        resp = client.get("/applications/app-001")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["id"] == "app-001"
+        assert data["job_title"] == "Backend Architect"
+        assert data["match_score"] == 88.5
+        assert data["missing_skills"] == ["Kubernetes"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_review_success():
+    """Module 8: human-in-loop edits cover letter and marks review status."""
+    mock_user = {"id": "user-456", "email": "dev@example.com"}
+    mock_sb = MagicMock()
+    # update call succeeds
+    mock_sb.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{"id": "app-001"}]
+    # subsequent get_application_details call succeeds
+    mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {
+            "id": "app-001",
+            "job_id": "job-101",
+            "status": "Found",
+            "review_status": "approved",
+            "cover_letter": "Edited human-approved letter",
+            "tailored_resume": "• Edited bullet",
+            "applied_at": None,
+            "created_at": "2026-10-11T12:00:00Z",
+            "jobs": {"title": "Engineer", "company": "Co", "url": "https://example.com"},
+        }
+    ]
+    mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = []
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        resp = client.patch(
+            "/applications/app-001/review",
+            json={
+                "cover_letter": "Edited human-approved letter",
+                "review_status": "approved",
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["cover_letter"] == "Edited human-approved letter"
+        assert data["review_status"] == "approved"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_approve_application_success():
+    """Module 8: approving triggers status update and Celery dispatch."""
+    mock_user = {"id": "user-456", "email": "dev@example.com"}
+    mock_sb = MagicMock()
+    mock_sb.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+        {"id": "app-001", "job_id": "job-101", "status": "Applied", "review_status": "approved"}
+    ]
+    mock_sb.table.return_value.insert.return_value.execute.return_value.data = [{"id": "log-002"}]
+    mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {
+            "id": "app-001",
+            "job_id": "job-101",
+            "status": "Applied",
+            "review_status": "approved",
+            "cover_letter": "Approved letter",
+            "tailored_resume": "• Approved bullet",
+            "applied_at": "2026-10-11T12:00:00Z",
+            "created_at": "2026-10-11T12:00:00Z",
+            "jobs": {"title": "DevOps Engineer", "company": "SaaS Inc", "url": "https://example.com"},
+        }
+    ]
+    mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = []
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        resp = client.patch("/applications/app-001/approve")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "Applied"
+        assert data["review_status"] == "approved"
+    finally:
+        app.dependency_overrides.clear()

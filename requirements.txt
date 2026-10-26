@@ -1,12 +1,13 @@
 # Python dependencies — Automated Job Application Backend
-# Last updated: 2026-10-11
+# Last updated: 2026-10-26
 # Install with: pip install -r requirements.txt
 
 # ── Core Agent ──────────────────────────────────────────────────────────────
 langgraph>=1.2.0
 langchain-groq>=1.1.0
 langchain-community>=0.4.0
-duckduckgo-search>=8.1.0
+duckduckgo-search>=8.1.0        # legacy alias (will use ddgs if available)
+ddgs>=0.1.0                     # new package name for DuckDuckGo search (renamed from duckduckgo-search)
 
 # ── Database ─────────────────────────────────────────────────────────────────
 supabase>=2.32.0
@@ -27,8 +28,6 @@ python-docx>=1.1.0             # Module 5: DOCX text extraction
 
 # ── Semantic Matching / Vector Embeddings ──────────────────────────────────────
 sentence-transformers>=3.0.0   # Module 7: all-MiniLM-L6-v2 dense embeddings (384-dim)
-scikit-learn>=1.4.0            # Module 7: pairwise cosine similarity & metrics fallback
-nltk>=3.8.0                    # Module 7: English stopwords & text tokenization
 
 # ── Background Tasks ──────────────────────────────────────────────────────────
 celery>=5.3.0                  # Module 8: task queue

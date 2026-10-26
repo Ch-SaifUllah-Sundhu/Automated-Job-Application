@@ -34,6 +34,20 @@ class StatusUpdateRequest(BaseModel):
     status: str = Field(..., description="New status (Found, Applied, Interview, Offer, Rejected)")
 
 
+class ReviewUpdateRequest(BaseModel):
+    cover_letter: Optional[str] = Field(None, description="Edited cover letter text")
+    tailored_resume: Optional[str] = Field(None, description="Edited tailored resume text")
+    review_status: Optional[str] = Field(None, description="'pending', 'approved', or 'rejected'")
+
+
+class AutomationLogItem(BaseModel):
+    id: Optional[str] = None
+    event: str
+    detail: Optional[str] = None
+    screenshot_url: Optional[str] = None
+    created_at: Optional[str] = None
+
+
 class ApplicationItem(BaseModel):
     id: str
     job_id: str
@@ -48,6 +62,14 @@ class ApplicationItem(BaseModel):
     created_at: Optional[str] = None
     match_score: Optional[float] = None
     missing_skills: Optional[List[str]] = None
+
+
+class ApplicationDetailItem(ApplicationItem):
+    job_description: Optional[str] = None
+    job_location: Optional[str] = None
+    required_skills: Optional[str] = None
+    missing_fields: Optional[List[str]] = None
+    logs: Optional[List[AutomationLogItem]] = None
 
 
 @router.post("/apply", response_model=ApplicationItem, summary="Apply to a job")
@@ -207,4 +229,241 @@ async def update_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update application status",
+        ) from exc
+
+
+@router.get("/{application_id}", response_model=ApplicationDetailItem, summary="Get application details")
+async def get_application_details(
+    application_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> ApplicationDetailItem:
+    """Returns single application with full job details, missing fields, and automation logs."""
+    user_id = current_user["id"]
+    try:
+        res = (
+            supabase.table("applications")
+            .select("*, jobs(title, company, url, description, required_skills)")
+            .eq("id", application_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not res or not res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found or not owned by user",
+            )
+        row = res.data[0]
+        job_info = row.get("jobs") or {}
+
+        # Fetch recent automation logs
+        logs_res = (
+            supabase.table("automation_logs")
+            .select("*")
+            .eq("application_id", application_id)
+            .order("created_at", desc=False)
+            .limit(30)
+            .execute()
+        )
+        log_items = [
+            AutomationLogItem(
+                id=str(lg.get("id")),
+                event=lg.get("event", "info"),
+                detail=lg.get("detail"),
+                screenshot_url=lg.get("screenshot_url"),
+                created_at=lg.get("created_at"),
+            )
+            for lg in (logs_res.data or [])
+        ] if logs_res and logs_res.data else []
+
+        return ApplicationDetailItem(
+            id=str(row.get("id")),
+            job_id=str(row.get("job_id")),
+            job_title=job_info.get("title"),
+            company=job_info.get("company"),
+            url=job_info.get("url"),
+            job_description=job_info.get("description"),
+            job_location=job_info.get("location"),
+            required_skills=job_info.get("required_skills"),
+            status=row.get("status", "Found"),
+            review_status=row.get("review_status", "pending"),
+            cover_letter=row.get("cover_letter"),
+            tailored_resume=row.get("tailored_resume"),
+            applied_at=row.get("applied_at"),
+            created_at=row.get("created_at"),
+            match_score=row.get("match_score"),
+            missing_skills=row.get("missing_skills"),
+            missing_fields=row.get("missing_fields"),
+            logs=log_items,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("Failed to get application %s: %s", application_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve application details",
+        ) from exc
+
+
+@router.patch("/{application_id}/review", response_model=ApplicationDetailItem, summary="Update review state and documents")
+async def update_review(
+    application_id: str,
+    req: ReviewUpdateRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> ApplicationDetailItem:
+    """Updates tailored cover letter / resume bullets and review status."""
+    user_id = current_user["id"]
+    update_data: Dict[str, Any] = {}
+    if req.cover_letter is not None:
+        update_data["cover_letter"] = req.cover_letter
+    if req.tailored_resume is not None:
+        update_data["tailored_resume"] = req.tailored_resume
+    if req.review_status is not None:
+        if req.review_status not in {"pending", "approved", "rejected"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="review_status must be 'pending', 'approved', or 'rejected'",
+            )
+        update_data["review_status"] = req.review_status
+
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields provided to update",
+        )
+
+    try:
+        res = (
+            supabase.table("applications")
+            .update(update_data)
+            .eq("id", application_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not res or not res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found or not owned by user",
+            )
+        return await get_application_details(application_id, current_user, supabase)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("Failed to update review for %s: %s", application_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update application review",
+        ) from exc
+
+
+@router.patch("/{application_id}/approve", response_model=ApplicationDetailItem, summary="Approve application for submission")
+async def approve_application(
+    application_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> ApplicationDetailItem:
+    """
+    Module 8 Human-in-Loop: Approves tailored documents and triggers
+    background automation worker to submit the application.
+    """
+    user_id = current_user["id"]
+    try:
+        # 1. Update review_status to 'approved' and status to 'Applied'
+        res = (
+            supabase.table("applications")
+            .update({
+                "review_status": "approved",
+                "status": "Applied",
+            })
+            .eq("id", application_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not res or not res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found or not owned by user",
+            )
+        updated = res.data[0]
+
+        # 2. Log approval event in automation_logs
+        try:
+            supabase.table("automation_logs").insert({
+                "application_id": application_id,
+                "event": "approved",
+                "detail": "Application approved by user. Queued for automated browser submission.",
+            }).execute()
+        except Exception as log_err:
+            log.warning("Could not write automation log for approve: %s", log_err)
+
+        # 3. Trigger Celery worker (gracefully fall back if Redis is offline)
+        try:
+            from workers.tasks.automation_task import submit_application
+            submit_application.delay(application_id=application_id, user_id=user_id)
+            log.info("Celery task enqueued for application %s", application_id)
+        except Exception as celery_err:
+            log.warning("Celery/Redis worker offline (%s) — application approved in database.", celery_err)
+
+        return await get_application_details(application_id, current_user, supabase)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("Failed to approve application %s: %s", application_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Approval failed: {exc}",
+        ) from exc
+
+
+@router.get("/{application_id}/logs", response_model=List[AutomationLogItem], summary="Get automation logs")
+async def get_automation_logs(
+    application_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase_client),
+) -> List[AutomationLogItem]:
+    """Retrieves execution audit logs for an application."""
+    user_id = current_user["id"]
+    try:
+        # Verify ownership
+        app_check = (
+            supabase.table("applications")
+            .select("id")
+            .eq("id", application_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not app_check or not app_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Application not found or not owned by user",
+            )
+
+        res = (
+            supabase.table("automation_logs")
+            .select("*")
+            .eq("application_id", application_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        return [
+            AutomationLogItem(
+                id=str(row.get("id")),
+                event=row.get("event", "info"),
+                detail=row.get("detail"),
+                screenshot_url=row.get("screenshot_url"),
+                created_at=row.get("created_at"),
+            )
+            for row in (res.data or [])
+        ]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("Failed to retrieve logs for %s: %s", application_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve automation logs",
         ) from exc

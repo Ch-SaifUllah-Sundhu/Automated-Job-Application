@@ -26,7 +26,10 @@ import time
 from typing import Any, Dict, List, Optional, TypedDict
 
 from dotenv import load_dotenv
-from duckduckgo_search import DDGS
+try:
+    from ddgs import DDGS  # new package name (duckduckgo_search was renamed)
+except ImportError:
+    from duckduckgo_search import DDGS  # fallback for older installs
 from langchain_groq import ChatGroq
 from langgraph.graph import END, StateGraph
 
@@ -45,16 +48,22 @@ log = logging.getLogger("agent")
 # ---------------------------------------------------------------------------
 # Supabase client (optional — pipeline continues gracefully without it)
 # ---------------------------------------------------------------------------
+# Supabase clients
+# - supabase: uses SERVICE KEY to bypass RLS for background job saves
+# - If SUPABASE_SERVICE_KEY is not set, falls back to anon key (RLS will block job inserts)
 _SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 _SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+# Service key bypasses RLS — needed for agent to insert into jobs table
+_SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or _SUPABASE_KEY
 
 try:
     from supabase import Client as _SupabaseClient
     from supabase import create_client as _create_client
 
-    if _SUPABASE_URL and _SUPABASE_KEY:
-        supabase: _SupabaseClient | None = _create_client(_SUPABASE_URL, _SUPABASE_KEY)
-        log.info("Supabase connected.")
+    if _SUPABASE_URL and _SUPABASE_SERVICE_KEY:
+        supabase: _SupabaseClient | None = _create_client(_SUPABASE_URL, _SUPABASE_SERVICE_KEY)
+        log.info("Supabase connected (service key mode: %s).",
+                 "service" if _SUPABASE_SERVICE_KEY != _SUPABASE_KEY else "anon")
     else:
         supabase = None
         log.warning("Supabase skipped — URL or KEY missing in .env.")
@@ -194,12 +203,16 @@ def _ddg_search(query: str, max_results: int) -> List[Dict[str, Any]] | str:
     """
     Run a single DuckDuckGo text search with retry + back-off.
     Returns the result list on success, or an error string on total failure.
+
+    NOTE: ddgs().text() returns a generator — must convert to list.
     """
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            raw = DDGS().text(query, max_results=max_results)
+            raw = list(DDGS().text(query, max_results=max_results))
             return raw or []
         except Exception as exc:  # noqa: BLE001
+            log.warning("DDG attempt %d/%d failed for query '%s': %s",
+                        attempt, _MAX_RETRIES, query[:60], exc)
             if attempt < _MAX_RETRIES:
                 time.sleep(_RETRY_DELAY ** attempt)
             else:
@@ -267,8 +280,8 @@ def detect_missing_skills(state: AgentState) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Node 3 — Draft
 # ---------------------------------------------------------------------------
-_MODEL = "llama3-8b-8192"
-_MAX_INPUT_CHARS = 500   # Groq 8k-token context guard (B4)
+_MODEL = "qwen/qwen3.8-27b"  # High-performance chat model on Groq
+_MAX_INPUT_CHARS = 2000  # Context guard
 _TEMP = 0.7
 
 
@@ -345,19 +358,23 @@ Return only the 3 bullets, one per line, each starting with '•'.
 
 
 # ---------------------------------------------------------------------------
-# Node 3 — Save
+# Node 4 — Save
 # ---------------------------------------------------------------------------
-_FAILED_STATUSES = {"Failed", "Search Failed", "No Jobs Found", "Drafting Failed"}
+_SKIP_SAVE_STATUSES = {"Failed", "Search Failed", "No Jobs Found", "Drafting Failed"}
 
 
 def save_to_database(state: AgentState) -> Dict[str, Any]:
     """
-    Persist the selected job into Supabase ``jobs`` table via upsert on ``url``.
+    Persist ALL found jobs into Supabase ``jobs`` table via upsert on ``url``.
+    Then persist the application row (with cover letter) when user_id is present.
 
     Skips silently when:
     - Supabase client is not configured
-    - The pipeline already failed upstream
+    - Search itself failed (no jobs to save)
     - The selected job has no URL (cannot deduplicate without it)
+
+    NOTE: Draft failures do NOT skip DB save — discovered jobs are always saved
+    so they appear in the jobs list even when Groq document generation fails.
 
     NOTE (B3): Only the job row is saved here. The applications row
     (with user_id + cover_letter) will be saved by the FastAPI layer in Module 5
@@ -369,8 +386,9 @@ def save_to_database(state: AgentState) -> Dict[str, Any]:
         log.warning("Supabase not configured — skipping DB save.")
         return {"status": "DB Skipped (No Connection)"}
 
-    if state.get("status") in _FAILED_STATUSES:
-        log.warning("Pipeline failed ('%s') — skipping DB save.", state.get("status"))
+    # Only skip if the *search itself* failed (no jobs found at all)
+    if state.get("status") in _SKIP_SAVE_STATUSES:
+        log.warning("Search failed ('%s') — skipping DB save.", state.get("status"))
         return {"status": state.get("status", "Failed")}
 
     job = state.get("selected_job") or {}
