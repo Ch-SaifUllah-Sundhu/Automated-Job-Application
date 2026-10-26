@@ -66,7 +66,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # State schema
 # ---------------------------------------------------------------------------
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     """Shared mutable state that flows through every LangGraph node."""
 
     keywords: str                           # Job search query (e.g. "Python Developer")
@@ -74,6 +74,8 @@ class AgentState(TypedDict):
     user_resume: str                        # Candidate's base resume text
     found_jobs: List[Dict[str, Any]]        # Raw DuckDuckGo results
     selected_job: Optional[Dict[str, Any]]  # First job chosen for drafting
+    missing_skills: List[str]               # Module 7: JD skills missing from candidate resume
+    match_score: Optional[float]           # Module 7: 0-100 Semantic match percentage
     tailored_resume: str                    # AI-rewritten resume bullets
     cover_letter: str                       # AI-generated cover letter
     status: str                             # Human-readable pipeline status
@@ -225,7 +227,45 @@ def _parse_ddg_result(r: Dict[str, Any], source: str = "DuckDuckGo") -> Dict[str
 
 
 # ---------------------------------------------------------------------------
-# Node 2 — Draft
+# Node 2 — Detect Missing Skills & Semantic Match (Module 7)
+# ---------------------------------------------------------------------------
+def detect_missing_skills(state: AgentState) -> Dict[str, Any]:
+    """
+    Evaluates candidate resume coverage against the chosen job posting using
+    Sentence-BERT embeddings and semantic skill gap analysis.
+    """
+    log.info("[Node 2] Detecting skill gaps and computing semantic match score...")
+    if not state.get("found_jobs"):
+        return {"missing_skills": [], "match_score": 0.0}
+
+    job = state.get("selected_job") or state["found_jobs"][0]
+    job_desc = job.get("description", "")
+    resume_text = state.get("user_resume", "")
+
+    try:
+        from services.match_service import compute_match_score
+
+        analytics = compute_match_score(
+            resume_text=resume_text,
+            job_description=job_desc,
+            job_required_skills=job.get("required_skills"),
+        )
+        return {
+            "selected_job": job,
+            "missing_skills": analytics.get("missing_skills", []),
+            "match_score": analytics.get("match_score"),
+        }
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Skill gap detection non-fatal error: %s", exc)
+        return {
+            "selected_job": job,
+            "missing_skills": [],
+            "match_score": None,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Node 3 — Draft
 # ---------------------------------------------------------------------------
 _MODEL = "llama3-8b-8192"
 _MAX_INPUT_CHARS = 500   # Groq 8k-token context guard (B4)
@@ -340,12 +380,18 @@ def save_to_database(state: AgentState) -> Dict[str, Any]:
         return {"status": "DB Skipped (No URL)"}
 
     try:
+        from services.embedding_service import embed_text
+
+        # Module 7: Generate dense 384-d vector embedding for job
+        job_emb = embed_text(f"{job.get('title', '')} {job.get('description', '')}")
+
         row = {
             "title": job.get("title", "Unknown"),
             "company": job.get("company", "Unknown"),
             "url": url,
             "description": job.get("description", ""),
             "source": job.get("source", "DuckDuckGo"),
+            "embedding": job_emb,
         }
         job_result = supabase.table("jobs").upsert(row, on_conflict="url").execute()
         log.info("Job saved: %s", job.get("title"))
@@ -367,9 +413,11 @@ def save_to_database(state: AgentState) -> Dict[str, Any]:
                     "status": "Found",
                     "tailored_resume": state.get("tailored_resume", ""),
                     "cover_letter": state.get("cover_letter", ""),
+                    "match_score": state.get("match_score"),
+                    "missing_skills": state.get("missing_skills", []),
                 }
                 supabase.table("applications").upsert(app_row, on_conflict="user_id,job_id").execute()
-                log.info("Application row saved for user: %s", user_id)
+                log.info("Application row saved for user: %s (match_score=%s)", user_id, state.get("match_score"))
 
         return {"status": "Saved to DB"}
     except Exception as exc:  # noqa: BLE001
@@ -381,15 +429,17 @@ def save_to_database(state: AgentState) -> Dict[str, Any]:
 # LangGraph compilation
 # ---------------------------------------------------------------------------
 _workflow = StateGraph(AgentState)
-_workflow.add_node("search",  search_jobs)
-_workflow.add_node("draft",   draft_documents)
+_workflow.add_node("search", search_jobs)
+_workflow.add_node("detect_skills", detect_missing_skills)
+_workflow.add_node("draft", draft_documents)
 _workflow.add_node("save_db", save_to_database)
 
 _workflow.set_entry_point("search")
-_workflow.add_edge("search",  "draft")
-_workflow.add_edge("draft",   "save_db")
+_workflow.add_edge("search", "detect_skills")
+_workflow.add_edge("detect_skills", "draft")
+_workflow.add_edge("draft", "save_db")
 _workflow.add_edge("save_db", END)
 
 # Public API — imported by main.py and test_agent.py
 agent_app = _workflow.compile()
-log.info("LangGraph agent compiled.")
+log.info("LangGraph agent compiled with Module 7 detect_missing_skills.")

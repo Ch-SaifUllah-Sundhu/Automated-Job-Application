@@ -10,13 +10,14 @@ User profile and resume management endpoints:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from supabase import Client
 
 from dependencies import get_current_user, get_supabase_client
+from services.embedding_service import embed_text
 from services.resume_parser import parse_resume
 
 log = logging.getLogger("routers.profile")
@@ -38,6 +39,7 @@ class ProfileResponse(BaseModel):
     linkedin_url: Optional[str] = None
     github_url: Optional[str] = None
     base_resume_text: Optional[str] = None
+    embedding: Optional[List[float]] = None
 
 
 class ResumeUploadResponse(BaseModel):
@@ -57,7 +59,7 @@ async def get_profile(
     try:
         res = (
             supabase.table("profiles")
-            .select("id, full_name, phone, linkedin_url, github_url, base_resume_text")
+            .select("id, full_name, phone, linkedin_url, github_url, base_resume_text, embedding")
             .eq("id", user_id)
             .limit(1)
             .execute()
@@ -71,6 +73,7 @@ async def get_profile(
                 linkedin_url=row.get("linkedin_url"),
                 github_url=row.get("github_url"),
                 base_resume_text=row.get("base_resume_text"),
+                embedding=row.get("embedding"),
             )
         # Return empty profile if not yet created in table
         return ProfileResponse(id=user_id)
@@ -93,6 +96,10 @@ async def update_profile(
     update_data = {k: v for k, v in req.model_dump().items() if v is not None}
     update_data["id"] = user_id
 
+    # Module 7: Re-embed trigger on resume text update
+    if update_data.get("base_resume_text"):
+        update_data["embedding"] = embed_text(update_data["base_resume_text"])
+
     try:
         res = supabase.table("profiles").upsert(update_data, on_conflict="id").execute()
         if not res or not res.data:
@@ -108,6 +115,7 @@ async def update_profile(
             linkedin_url=saved.get("linkedin_url"),
             github_url=saved.get("github_url"),
             base_resume_text=saved.get("base_resume_text"),
+            embedding=saved.get("embedding"),
         )
     except HTTPException:
         raise
@@ -126,7 +134,8 @@ async def upload_resume(
     supabase: Client = Depends(get_supabase_client),
 ) -> ResumeUploadResponse:
     """
-    Parses an uploaded PDF or DOCX file, extracts text, and stores it in profiles.base_resume_text.
+    Parses an uploaded PDF or DOCX file, extracts text, computes 384-d SBERT embedding,
+    and stores it in profiles.base_resume_text and profiles.embedding.
     """
     user_id = current_user["id"]
     filename = file.filename or "resume.pdf"
@@ -143,9 +152,16 @@ async def upload_resume(
                 detail="Could not extract any text from the provided document",
             )
 
+        # Module 7: Compute dense 384-d Sentence-BERT embedding
+        embedding = embed_text(extracted_text)
+
         # Upsert into user profile
         supabase.table("profiles").upsert(
-            {"id": user_id, "base_resume_text": extracted_text},
+            {
+                "id": user_id,
+                "base_resume_text": extracted_text,
+                "embedding": embedding,
+            },
             on_conflict="id",
         ).execute()
 
