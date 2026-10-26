@@ -21,10 +21,18 @@ log = logging.getLogger("dependencies")
 security = HTTPBearer(auto_error=False)
 
 
-def get_supabase_client() -> Client:
-    """Returns an initialized Supabase client."""
+def get_supabase_client(
+    credentials: HTTPAuthorizationCredentials | None = Security(security),
+) -> Client:
+    """Returns an initialized Supabase client scoped with user credentials for RLS if present."""
     settings = get_settings()
-    return create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+    if credentials and credentials.credentials:
+        try:
+            client.postgrest.auth(credentials.credentials)
+        except Exception as e:
+            log.warning("Could not attach user JWT to Supabase client: %s", e)
+    return client
 
 
 async def get_current_user(
