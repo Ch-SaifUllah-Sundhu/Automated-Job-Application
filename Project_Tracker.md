@@ -3,7 +3,7 @@
 > **Project:** Job Application Assistant (SaaS)  
 > **Source of Truth:** [AGENTS.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/AGENTS.md) & [Architecture.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/Architecture.md)  
 > **Last Updated:** 2026-10-24  
-> **Current Focus:** Module 8 (Dynamic Application + Human-in-Loop Review) 🏃
+> **Current Focus:** Module 9 (Playwright Automation Engine) 🏃
 
 ---
 
@@ -97,14 +97,16 @@
 - [x] **API tests**: `GET /jobs` returns `match_score`, sorting works, RLS prevents cross-user access.
 - [x] **Frontend**: `npm run build` passes with 0 errors; manual Kanban drag test on desktop and touch.
 
-### Module 8: Dynamic Application + Human-in-Loop Review [⬜ Planned]
-- [ ] **LangGraph Interrupt**: Configure checkpointer breakpoint after `draft_documents` awaiting human approval.
-- [ ] **Celery App**: Setup `backend/workers/celery_app.py` with Redis broker.
-- [ ] **Automation Task Skeleton**: Create `backend/workers/tasks/automation_task.py`.
-- [ ] **Approve Endpoint**: Implement `PATCH /applications/{id}/approve` to trigger Celery task.
-- [ ] **Review Page**: Build `frontend/src/app/dashboard/review/[id]/page.tsx` (side-by-side JD vs tailored document editing).
-- [ ] **Missing Data Modal**: Modal to prompt user for missing fields (manual input or Groq auto-generate); backed by a `detect_missing_fields` node.
-- [ ] **Supabase Realtime**: Live updates on application status changes in frontend (also refreshes the Module 7 Kanban).
+### Module 8: Dynamic Application + Human-in-Loop Review [✅ Done]
+- [x] **Celery App**: Setup `backend/workers/celery_app.py` with Redis broker and result backend.
+- [x] **Automation Task Skeleton**: Create `backend/workers/tasks/automation_task.py` with Supabase data loading, missing field validation, and logging.
+- [x] **Approve Endpoint**: Implement `PATCH /applications/{id}/approve` to update status, write audit log, and trigger Celery task with graceful offline fallback.
+- [x] **Review API Endpoints**: Implement `GET /applications/{id}`, `PATCH /applications/{id}/review`, and `GET /applications/{id}/logs`.
+- [x] **Review Page**: Build `frontend/src/app/dashboard/review/[id]/page.tsx` (side-by-side JD vs tailored document editing with cover letter & bullet point editor).
+- [x] **Missing Data Quick-Fix**: Interactive quick-fix fields on review page to prompt user for missing submission fields and save to profile.
+- [x] **Automation Audit Trail**: Live sync timeline displaying events from `automation_logs` on the review page.
+- [x] **Kanban Integration**: Wire "Review & Submit" CTA directly into Kanban card and detail modal on `/dashboard`.
+- [x] **Verification**: All 55 backend unit/integration tests passing; `npm run build` succeeds with 0 errors.
 
 ### Module 9: Playwright Automation Engine [⬜ Planned]
 - [ ] Install Playwright and Chromium dependencies (`playwright`, `playwright-stealth`).

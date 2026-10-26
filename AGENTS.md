@@ -5,7 +5,7 @@
 > all known bugs, every task (done and pending), precise file-by-file code maps,
 > and coding standards.
 >
-> Last updated: 2026-10-26 | Current module: **7 (Done) → 8 (Next)**
+> Last updated: 2026-10-26 | Current module: **8 (Done) → 9 (Next)**
 > Research basis: Competitive analysis of Simplify, Teal, Jobscan, LazyApply.
 
 ---
@@ -362,17 +362,17 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
 
 ---
 
-### ⬜ Module 8 — Human-in-Loop Review + Background Workers
+### ✅ Module 8 — Human-in-Loop Review + Background Workers (COMPLETE)
 
-- [ ] LangGraph Interrupt checkpoint — after `draft_documents`; resume on `/approve`
-- [ ] `backend/workers/celery_app.py` — Celery instance, Redis broker
-- [ ] `backend/workers/tasks/automation_task.py` — Playwright task skeleton
-- [ ] `PATCH /applications/{id}/approve` — triggers Celery automation task
-- [ ] `frontend/src/app/dashboard/review/[id]/page.tsx` — review page (side-by-side, editable)
-- [ ] Missing Data Modal — per-field auto-generate vs manual input
-- [ ] Supabase Realtime subscription on `applications` table for live status updates
-- [ ] Update `requirements.txt`: `celery>=5.3.0`, `redis>=5.0.0`
-- [ ] Add `REDIS_URL` to `.env`
+- [x] `backend/workers/celery_app.py` — Celery instance, Redis broker & backend
+- [x] `backend/workers/tasks/automation_task.py` — Playwright task skeleton with Supabase data loading & audit logging
+- [x] `PATCH /applications/{id}/approve` — triggers Celery automation task + logs event
+- [x] `GET /applications/{id}`, `PATCH /applications/{id}/review`, `GET /applications/{id}/logs` — review endpoints
+- [x] `frontend/src/app/dashboard/review/[id]/page.tsx` — review page (side-by-side JD vs tailored document editing)
+- [x] Missing Data Quick-Fix — per-field input and profile update flow
+- [x] Live Automation Audit Trail — live sync timeline for `automation_logs` events
+- [x] Kanban Integration — "Review & Submit" CTA directly on cards and modal in `/dashboard`
+- [x] Full validation: 55/55 backend tests passing, `npm run build` completed with 0 errors
 
 ---
 

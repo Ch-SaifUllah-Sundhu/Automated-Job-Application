@@ -267,22 +267,29 @@ function DraggableCard({
       </div>
 
       {/* Stage Action Buttons */}
-      <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+      <div className="pt-0.5 space-y-1" onClick={(e) => e.stopPropagation()}>
         {col.id === "Found" && (
-          <button
-            disabled={movingId === app.id}
-            onClick={() => onMoveStatus(app.id, "Applied")}
-            className="w-full h-7 rounded bg-[#0B0F19] hover:bg-[#2563EB] border border-[#1F2937] hover:border-[#2563EB] text-[10px] font-medium text-white transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
-          >
-            {movingId === app.id ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <>
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                <span>Mark Applied →</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <Link
+              href={`/dashboard/review/${app.id}`}
+              className="flex-1 h-7 rounded bg-[#2563EB] hover:bg-blue-500 text-[10px] font-semibold text-white transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-sm"
+            >
+              <Sparkles className="w-3 h-3 text-white" />
+              <span>Review & Submit</span>
+            </Link>
+            <button
+              disabled={movingId === app.id}
+              onClick={() => onMoveStatus(app.id, "Applied")}
+              title="Quick mark as applied without review"
+              className="h-7 px-2 rounded bg-[#0B0F19] hover:bg-[#1F2937] border border-[#1F2937] text-[10px] text-[#94A3B8] hover:text-white transition-colors cursor-pointer flex items-center justify-center disabled:opacity-50"
+            >
+              {movingId === app.id ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              )}
+            </button>
+          </div>
         )}
         {col.id === "Applied" && (
           <button
@@ -1211,26 +1218,36 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="mt-5 pt-3.5 border-t border-[#1F2937] flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedApp(null)}
-                className="h-8 px-3.5 rounded bg-[#0B0F19] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-medium text-[#CBD5E1] transition-colors cursor-pointer"
+            <div className="mt-5 pt-3.5 border-t border-[#1F2937] flex items-center justify-between gap-2">
+              <Link
+                href={`/dashboard/review/${selectedApp.id}`}
+                className="h-8 px-3.5 rounded bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
               >
-                Close
-              </button>
-              <button
-                type="button"
-                disabled={movingId === selectedApp.id}
-                onClick={async () => {
-                  await moveAppStatus(selectedApp.id, "Applied");
-                  setSelectedApp(null);
-                }}
-                className="h-8 px-3.5 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
-              >
-                <span>Mark as Applied</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Open Review Studio →</span>
+              </Link>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedApp(null)}
+                  className="h-8 px-3.5 rounded bg-[#0B0F19] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-medium text-[#CBD5E1] transition-colors cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  disabled={movingId === selectedApp.id}
+                  onClick={async () => {
+                    await moveAppStatus(selectedApp.id, "Applied");
+                    setSelectedApp(null);
+                  }}
+                  className="h-8 px-3.5 rounded bg-[#1E293B] hover:bg-[#334155] border border-[#334155] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  <span>Mark Applied</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
