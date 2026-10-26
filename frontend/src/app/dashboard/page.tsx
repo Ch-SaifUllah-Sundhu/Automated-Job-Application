@@ -5,6 +5,20 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { api, ApplicationItem, JobItem } from "@/lib/api";
+import { MatchRing } from "@/components/jobs/JobCard";
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  useDraggable,
+  DragEndEvent,
+  DragStartEvent,
+} from "@dnd-kit/core";
 import {
   LogOut,
   User,
@@ -34,9 +48,11 @@ import {
   RefreshCw,
   ChevronRight,
   ExternalLink,
+  Compass,
+  GripVertical,
 } from "lucide-react";
 
-// ── Kanban Stage Config ─────────────────────────────────────────────────────
+// ── Kanban 5-Stage Config ───────────────────────────────────────────────────
 const STAGE_CONFIG: {
   id: string;
   label: string;
@@ -72,6 +88,13 @@ const STAGE_CONFIG: {
     colorClass: "border-amber-500/40 text-amber-400 bg-amber-500/10",
     badgeClass: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
   },
+  {
+    id: "Rejected",
+    label: "Closed / Rejected",
+    apiStatus: "Rejected",
+    colorClass: "border-rose-500/40 text-rose-400 bg-rose-500/10",
+    badgeClass: "bg-rose-500/15 text-rose-400 border border-rose-500/30",
+  },
 ];
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -85,6 +108,232 @@ function timeAgo(dateStr?: string | null): string {
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
 }
+
+// ── Droppable Column Component ──────────────────────────────────────────────
+function DroppableColumn({
+  col,
+  count,
+  children,
+  onAdd,
+}: {
+  col: (typeof STAGE_CONFIG)[number];
+  count: number;
+  children: React.ReactNode;
+  onAdd: () => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: col.apiStatus,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`rounded-xl bg-[#0E131F] border p-3 flex flex-col min-h-[480px] transition-colors ${
+        isOver
+          ? "border-[#2563EB] bg-[#161F33]/60 shadow-lg shadow-[#2563EB]/10"
+          : "border-[#1F2937]"
+      }`}
+    >
+      {/* Column Header */}
+      <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[#1F2937]">
+        <div className="flex items-center gap-2">
+          <span
+            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${col.colorClass}`}
+          >
+            {col.label}
+          </span>
+          <span className="text-xs text-[#94A3B8] font-mono">({count})</span>
+        </div>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="text-[#64748B] hover:text-white p-1 rounded transition-colors"
+          title={`Add opportunity to ${col.label}`}
+        >
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Cards container */}
+      <div className="space-y-2.5 flex-1 overflow-y-auto">{children}</div>
+    </div>
+  );
+}
+
+// ── Draggable Card Component ────────────────────────────────────────────────
+function DraggableCard({
+  app,
+  col,
+  movingId,
+  onOpenModal,
+  onMoveStatus,
+}: {
+  app: ApplicationItem;
+  col: (typeof STAGE_CONFIG)[number];
+  movingId: string | null;
+  onOpenModal: (app: ApplicationItem) => void;
+  onMoveStatus: (appId: string, newStatus: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: app.id,
+      data: { app, status: app.status },
+    });
+
+  const style = transform
+    ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+      }
+    : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-3 rounded-lg bg-[#111827] border transition-all select-none space-y-2.5 group shadow-sm ${
+        isDragging
+          ? "opacity-30 border-dashed border-[#2563EB] z-50"
+          : "border-[#1F2937] hover:border-[#2563EB]/50 hover:bg-[#161F33]"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div
+          {...attributes}
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 -m-1 text-[#64748B] hover:text-[#94A3B8] transition-colors rounded shrink-0"
+          title="Drag card to move stage"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </div>
+
+        <div
+          className="flex-1 min-w-0 cursor-pointer"
+          onClick={() => onOpenModal(app)}
+        >
+          <h3 className="text-xs font-semibold text-white group-hover:text-[#60A5FA] transition-colors leading-snug truncate">
+            {app.job_title || "Untitled Role"}
+          </h3>
+          <p className="text-[11px] text-[#94A3B8] flex items-center gap-1 mt-0.5 truncate">
+            <Building className="w-3 h-3 text-[#64748B] shrink-0" />
+            <span className="truncate">{app.company || "—"}</span>
+          </p>
+        </div>
+
+        {app.match_score !== null && app.match_score !== undefined && (
+          <div className="shrink-0" title={`Semantic Match: ${Math.round(app.match_score)}%`}>
+            <MatchRing score={app.match_score} size={30} strokeWidth={3} />
+          </div>
+        )}
+      </div>
+
+      {app.missing_skills && app.missing_skills.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap pt-0.5">
+          {app.missing_skills.slice(0, 2).map((s, idx) => (
+            <span
+              key={idx}
+              className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-rose-500/10 text-rose-300 border border-rose-500/20"
+            >
+              Missing: {s}
+            </span>
+          ))}
+          {app.missing_skills.length > 2 && (
+            <span className="text-[9px] text-[#64748B] font-mono">
+              +{app.missing_skills.length - 2}
+            </span>
+          )}
+        </div>
+      )}
+
+      {app.url && (
+        <a
+          href={app.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-[10px] text-[#2563EB] hover:underline flex items-center gap-0.5 mt-0.5"
+        >
+          View posting <ExternalLink className="w-2.5 h-2.5" />
+        </a>
+      )}
+
+      <div
+        className="flex items-center justify-between text-[10px] text-[#64748B] pt-2 border-t border-[#1F2937] cursor-pointer"
+        onClick={() => onOpenModal(app)}
+      >
+        <span>Applied {timeAgo(app.applied_at || app.created_at)}</span>
+        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${col.badgeClass}`}>
+          {app.review_status || "pending"}
+        </span>
+      </div>
+
+      {/* Stage Action Buttons */}
+      <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+        {col.id === "Found" && (
+          <button
+            disabled={movingId === app.id}
+            onClick={() => onMoveStatus(app.id, "Applied")}
+            className="w-full h-7 rounded bg-[#0B0F19] hover:bg-[#2563EB] border border-[#1F2937] hover:border-[#2563EB] text-[10px] font-medium text-white transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
+          >
+            {movingId === app.id ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <>
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>Mark Applied →</span>
+              </>
+            )}
+          </button>
+        )}
+        {col.id === "Applied" && (
+          <button
+            disabled={movingId === app.id}
+            onClick={() => onMoveStatus(app.id, "Interview")}
+            className="w-full h-7 rounded bg-purple-950/40 hover:bg-purple-600 border border-purple-800/80 text-[10px] font-medium text-purple-300 hover:text-white transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
+          >
+            {movingId === app.id ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <>
+                <Briefcase className="w-3 h-3" />
+                <span>Move to Interview →</span>
+              </>
+            )}
+          </button>
+        )}
+        {col.id === "Interview" && (
+          <button
+            disabled={movingId === app.id}
+            onClick={() => onMoveStatus(app.id, "Offer")}
+            className="w-full h-7 rounded bg-amber-950/40 hover:bg-amber-600 border border-amber-800/80 text-[10px] font-medium text-amber-300 hover:text-white transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
+          >
+            {movingId === app.id ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <>
+                <Zap className="w-3 h-3" />
+                <span>Mark Offer Received →</span>
+              </>
+            )}
+          </button>
+        )}
+        {col.id === "Offer" && (
+          <button
+            disabled={movingId === app.id}
+            onClick={() => onMoveStatus(app.id, "Rejected")}
+            className="w-full h-7 rounded bg-rose-950/30 hover:bg-rose-900/50 border border-rose-900/40 text-[10px] font-medium text-rose-300 transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
+          >
+            {movingId === app.id ? (
+              <Loader2 className="w-3 h-3 animate-spin" />
+            ) : (
+              <span>Close / Archive</span>
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 // ── Component ───────────────────────────────────────────────────────────────
 export default function DashboardPage() {
@@ -119,6 +368,7 @@ export default function DashboardPage() {
   const [searchingRemote, setSearchingRemote] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
+  const [activeDragApp, setActiveDragApp] = useState<ApplicationItem | null>(null);
 
   // ── Notifications (static for now — Module 8 adds Supabase Realtime) ──
   const [notificationsList] = useState([
@@ -251,6 +501,52 @@ export default function DashboardPage() {
     [getAccessToken, fetchData, showToast]
   );
 
+  // ── Drag & Drop Handlers ───────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor)
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const found = applications.find((a) => a.id === String(active.id));
+    if (found) {
+      setActiveDragApp(found);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragApp(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
+    // Is overId a column status?
+    let targetStatus: string | null = null;
+    const isColumn = STAGE_CONFIG.some((col) => col.apiStatus === overId);
+    if (isColumn) {
+      targetStatus = overId;
+    } else {
+      const targetApp = applications.find((a) => a.id === overId);
+      if (targetApp) {
+        targetStatus = targetApp.status;
+      }
+    }
+
+    if (targetStatus) {
+      const sourceApp = applications.find((a) => a.id === activeId);
+      if (sourceApp && sourceApp.status !== targetStatus) {
+        moveAppStatus(activeId, targetStatus);
+      }
+    }
+  };
+
   const handleOpenAppModal = (app: ApplicationItem) => {
     setSelectedApp(app);
     setCoverLetterDraft(app.cover_letter || "");
@@ -371,10 +667,21 @@ export default function DashboardPage() {
 
           {/* Nav */}
           <nav className="p-3 space-y-1">
-            <button className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-semibold bg-[#161F33] text-white border-l-2 border-[#2563EB] cursor-pointer">
+            <Link
+              href="/dashboard"
+              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-semibold bg-[#161F33] text-white border-l-2 border-[#2563EB] cursor-pointer"
+            >
               <FolderKanban className="w-4 h-4 text-[#2563EB]" />
               <span>Job Pipeline</span>
-            </button>
+            </Link>
+
+            <Link
+              href="/dashboard/jobs"
+              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors"
+            >
+              <Compass className="w-4 h-4 text-[#94A3B8]" />
+              <span>Jobs &amp; Match Scoring</span>
+            </Link>
 
             <Link
               href="/onboarding"
@@ -605,43 +912,29 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Kanban Board */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
-              {STAGE_CONFIG.map((col) => {
-                const colApps = filteredApps.filter((a) => a.status === col.apiStatus);
-                return (
-                  <div
-                    key={col.id}
-                    className="rounded-lg bg-[#0E131F] border border-[#1F2937] p-3 flex flex-col min-h-[480px]"
-                  >
-                    {/* Column Header */}
-                    <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[#1F2937]">
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${col.colorClass}`}>
-                          {col.label}
-                        </span>
-                        <span className="text-xs text-[#94A3B8] font-mono">
-                          ({loadingData ? "…" : colApps.length})
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowSearchModal(true)}
-                        className="text-[#64748B] hover:text-white p-1 rounded transition-colors"
-                        title="Add opportunity"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    {/* Cards */}
-                    <div className="space-y-2.5 flex-1 overflow-y-auto">
+            {/* Dynamic DnD-Kit 5-Stage Kanban Board */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCorners}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
+                {STAGE_CONFIG.map((col) => {
+                  const colApps = filteredApps.filter((a) => a.status === col.apiStatus);
+                  return (
+                    <DroppableColumn
+                      key={col.id}
+                      col={col}
+                      count={loadingData ? 0 : colApps.length}
+                      onAdd={() => setShowSearchModal(true)}
+                    >
                       {loadingData ? (
                         <div className="h-24 flex items-center justify-center">
                           <Loader2 className="w-4 h-4 animate-spin text-[#64748B]" />
                         </div>
                       ) : colApps.length === 0 ? (
-                        <div className="h-32 rounded border border-dashed border-[#1F2937] flex flex-col items-center justify-center text-center p-3">
+                        <div className="h-32 rounded-lg border border-dashed border-[#1F2937] flex flex-col items-center justify-center text-center p-3">
                           <span className="text-xs text-[#64748B]">No items in {col.label}</span>
                           {col.id === "Found" && (
                             <button
@@ -654,98 +947,39 @@ export default function DashboardPage() {
                         </div>
                       ) : (
                         colApps.map((app) => (
-                          <div
+                          <DraggableCard
                             key={app.id}
-                            onClick={() => handleOpenAppModal(app)}
-                            className="p-3 rounded bg-[#111827] hover:bg-[#161F33] border border-[#1F2937] hover:border-[#2563EB]/50 transition-colors cursor-pointer space-y-2.5 group shadow-sm"
-                          >
-                            <div>
-                              <h3 className="text-xs font-semibold text-white group-hover:text-[#60A5FA] transition-colors leading-snug">
-                                {app.job_title || "Untitled Role"}
-                              </h3>
-                              <p className="text-[11px] text-[#94A3B8] flex items-center gap-1 mt-0.5">
-                                <Building className="w-3 h-3 text-[#64748B]" />
-                                {app.company || "—"}
-                              </p>
-                              {app.url && (
-                                <a
-                                  href={app.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="text-[10px] text-[#2563EB] hover:underline flex items-center gap-0.5 mt-0.5"
-                                >
-                                  View posting <ExternalLink className="w-2.5 h-2.5" />
-                                </a>
-                              )}
-                            </div>
-
-                            <div className="flex items-center justify-between text-[10px] text-[#64748B] pt-2 border-t border-[#1F2937]">
-                              <span>Applied {timeAgo(app.applied_at || app.created_at)}</span>
-                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${col.badgeClass}`}>
-                                {app.review_status || "pending"}
-                              </span>
-                            </div>
-
-                            {/* Stage Action */}
-                            <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
-                              {col.id === "Found" && (
-                                <button
-                                  disabled={movingId === app.id}
-                                  onClick={() => moveAppStatus(app.id, "Applied")}
-                                  className="w-full h-7 rounded bg-[#0B0F19] hover:bg-[#2563EB] border border-[#1F2937] hover:border-[#2563EB] text-[10px] font-medium text-white transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
-                                >
-                                  {movingId === app.id ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <>
-                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                      <span>Mark Applied →</span>
-                                    </>
-                                  )}
-                                </button>
-                              )}
-                              {col.id === "Applied" && (
-                                <button
-                                  disabled={movingId === app.id}
-                                  onClick={() => moveAppStatus(app.id, "Interview")}
-                                  className="w-full h-7 rounded bg-purple-950/40 hover:bg-purple-600 border border-purple-800/80 text-[10px] font-medium text-purple-300 hover:text-white transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
-                                >
-                                  {movingId === app.id ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <>
-                                      <Briefcase className="w-3 h-3" />
-                                      <span>Move to Interview →</span>
-                                    </>
-                                  )}
-                                </button>
-                              )}
-                              {col.id === "Interview" && (
-                                <button
-                                  disabled={movingId === app.id}
-                                  onClick={() => moveAppStatus(app.id, "Offer")}
-                                  className="w-full h-7 rounded bg-amber-950/40 hover:bg-amber-600 border border-amber-800/80 text-[10px] font-medium text-amber-300 hover:text-white transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
-                                >
-                                  {movingId === app.id ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <>
-                                      <Zap className="w-3 h-3" />
-                                      <span>Mark Offer Received →</span>
-                                    </>
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                          </div>
+                            app={app}
+                            col={col}
+                            movingId={movingId}
+                            onOpenModal={handleOpenAppModal}
+                            onMoveStatus={moveAppStatus}
+                          />
                         ))
                       )}
-                    </div>
+                    </DroppableColumn>
+                  );
+                })}
+              </div>
+
+              {/* Drag Overlay */}
+              <DragOverlay>
+                {activeDragApp ? (
+                  <div className="p-3 rounded-lg bg-[#161F33] border border-[#2563EB] shadow-2xl opacity-95 w-64 pointer-events-none space-y-1.5">
+                    <h3 className="text-xs font-semibold text-white truncate">
+                      {activeDragApp.job_title || "Untitled Role"}
+                    </h3>
+                    <p className="text-[11px] text-[#94A3B8] flex items-center gap-1">
+                      <Building className="w-3 h-3 text-[#64748B]" />
+                      <span className="truncate">{activeDragApp.company}</span>
+                    </p>
+                    <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#2563EB]/20 text-[#60A5FA] border border-[#2563EB]/40">
+                      Moving stage…
+                    </span>
                   </div>
-                );
-              })}
-            </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
           </div>
 
           {/* Danger Zone */}

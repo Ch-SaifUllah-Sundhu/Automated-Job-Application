@@ -66,6 +66,9 @@ export interface JobItem {
   description?: string | null;
   source?: string | null;
   created_at?: string | null;
+  match_score?: number | null;
+  missing_skills?: string[] | null;
+  matched_skills?: string[] | null;
 }
 
 export interface JobListResponse {
@@ -87,6 +90,8 @@ export interface ApplicationItem {
   tailored_resume?: string | null;
   applied_at?: string | null;
   created_at?: string | null;
+  match_score?: number | null;
+  missing_skills?: string[] | null;
 }
 
 export interface JobSearchResponse {
@@ -148,17 +153,28 @@ export const api = {
     }),
 
   /**
-   * Paginated list of jobs stored in Supabase.
+   * Paginated list of jobs stored in Supabase with semantic match scoring.
    * @param page - 1-based page number
    * @param limit - Items per page (max 100)
    * @param query - Optional keyword filter on job title
+   * @param portal - Optional filter by portal/source
+   * @param sort - Optional sort parameter (e.g. 'match_score')
    */
-  getJobs: (token: string, page = 1, limit = 20, query?: string): Promise<JobListResponse> => {
+  getJobs: (
+    token: string,
+    page = 1,
+    limit = 20,
+    query?: string,
+    portal?: string,
+    sort?: string
+  ): Promise<JobListResponse> => {
     const params = new URLSearchParams({
       page: String(page),
       limit: String(limit),
     });
     if (query) params.set("query", query);
+    if (portal && portal !== "all") params.set("portal", portal);
+    if (sort) params.set("sort", sort);
     return request<JobListResponse>(`/jobs?${params.toString()}`, { token });
   },
 

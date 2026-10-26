@@ -5,7 +5,7 @@
 > all known bugs, every task (done and pending), precise file-by-file code maps,
 > and coding standards.
 >
-> Last updated: 2026-10-11 | Current module: **6 (Done) → 7 (Next)**
+> Last updated: 2026-10-26 | Current module: **7 (Done) → 8 (Next)**
 > Research basis: Competitive analysis of Simplify, Teal, Jobscan, LazyApply.
 
 ---
@@ -329,36 +329,36 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
 
 ---
 
-### 🏃 Module 7 — Job Dashboard & Semantic Match Scoring
+### ✅ Module 7 — Job Dashboard & Semantic Match Scoring (COMPLETE)
 
 > **Design change (2026-10-24):** TF-IDF + NLTK replaced by embedding-based semantic matching (Sentence-BERT `all-MiniLM-L6-v2`) stored in Supabase pgvector. SBERT captures semantic context, synonyms, and paraphrasing that word-frequency models miss. A secondary skill-overlap score provides explainability.
 
 **7A. Vector storage (pgvector)**
-- [ ] **Migration**: Enable `vector` extension; add `embedding vector(384)` to `profiles` and `jobs`; add `match_score` (numeric), `missing_skills` (jsonb) to `applications`. Update `schema.sql`.
-- [ ] **Index**: Create HNSW index with `vector_cosine_ops` on `jobs.embedding`; verify RLS policies scope rows per user.
-- [ ] **Re-embed trigger**: Recompute profile embedding whenever a resume is uploaded or profile is updated (hook into `POST /profile/resume`).
+- [x] **Migration**: Enable `vector` extension; add `embedding vector(384)` to `profiles` and `jobs`; add `match_score` (numeric), `missing_skills` (jsonb) to `applications`. Update `schema.sql`.
+- [x] **Index**: Create HNSW index with `vector_cosine_ops` on `jobs.embedding`; verify RLS policies scope rows per user.
+- [x] **Re-embed trigger**: Recompute profile embedding whenever a resume is uploaded or profile is updated (hook into `POST /profile/resume`).
 
 **7B. Embedding & match services**
-- [ ] **Embedding Service**: Create `backend/services/embedding_service.py` using `sentence-transformers` (`all-MiniLM-L6-v2`, 384 dims). Batch-encode and chunk resumes/JDs by section.
-- [ ] **Match Scorer**: Create `backend/services/match_service.py` — cosine similarity between resume and JD chunk embeddings, aggregated to a calibrated 0–100 score; weighted blend with skill-overlap score.
-- [ ] **Match API**: Update `GET /jobs` to return `match_score` per job for authenticated user; support `sort=match_score`.
-- [ ] **Dependencies**: Add `sentence-transformers` to `requirements.txt`.
+- [x] **Embedding Service**: Create `backend/services/embedding_service.py` using `sentence-transformers` (`all-MiniLM-L6-v2`, 384 dims). Batch-encode and chunk resumes/JDs by section.
+- [x] **Match Scorer**: Create `backend/services/match_service.py` — cosine similarity between resume and JD chunk embeddings, aggregated to a calibrated 0–100 score; weighted blend with skill-overlap score.
+- [x] **Match API**: Update `GET /jobs` to return `match_score` per job for authenticated user; support `sort=match_score`.
+- [x] **Dependencies**: Add `sentence-transformers` to `requirements.txt`.
 
 **7C. Agent: missing skills**
-- [ ] **Missing Skills Node**: Add `detect_missing_skills` node to LangGraph pipeline — Groq extracts JD skills, compared to candidate skills by embedding similarity threshold (e.g. "JS" vs "JavaScript"). Emits `missing_skills[]` to `AgentState`.
-- [ ] **Naming distinction**: Keep `detect_missing_fields` (form input fields) reserved for Module 8's review modal.
+- [x] **Missing Skills Node**: Add `detect_missing_skills` node to LangGraph pipeline — Groq extracts JD skills, compared to candidate skills by embedding similarity threshold (e.g. "JS" vs "JavaScript"). Emits `missing_skills[]` to `AgentState`.
+- [x] **Naming distinction**: Keep `detect_missing_fields` (form input fields) reserved for Module 8's review modal.
 
 **7D. Frontend**
-- [ ] **Job Listing Page**: Build `frontend/src/app/dashboard/jobs/page.tsx` with debounced keyword, location, and portal filters with `sort=match_score`.
-- [ ] **Job Card Component**: Build `frontend/src/components/jobs/JobCard.tsx` with color-coded match score SVG ring and missing-skills chips.
-- [ ] **Kanban Board**: Build dynamic drag-and-drop Kanban in `frontend/src/app/dashboard/page.tsx` across 5 stages (Discovered, Applied, Interview, Offer, Rejected) using `@dnd-kit`.
-- [ ] **Status Persistence**: Wire column transitions to `PATCH /applications/{id}/status` with optimistic updates and error rollback.
+- [x] **Job Listing Page**: Build `frontend/src/app/dashboard/jobs/page.tsx` with debounced keyword, location, and portal filters with `sort=match_score`.
+- [x] **Job Card Component**: Build `frontend/src/components/jobs/JobCard.tsx` with color-coded match score SVG ring and missing-skills chips.
+- [x] **Kanban Board**: Build dynamic drag-and-drop Kanban in `frontend/src/app/dashboard/page.tsx` across 5 stages (Discovered, Applied, Interview, Offer, Rejected) using `@dnd-kit`.
+- [x] **Status Persistence**: Wire column transitions to `PATCH /applications/{id}/status` with optimistic updates and error rollback.
 
 **7E. Tests & verification**
-- [ ] **Scoring tests**: Synonym pairs score high, unrelated job scores low, 0–100 calibration verified.
-- [ ] **Skill-gap tests**: Alias handling and missing skill detection verified.
-- [ ] **API tests**: `GET /jobs` returns `match_score`, sorting verified, RLS isolation confirmed.
-- [ ] **Frontend**: `npm run build` passes with 0 errors.
+- [x] **Scoring tests**: Synonym pairs score high, unrelated job scores low, 0–100 calibration verified.
+- [x] **Skill-gap tests**: Alias handling and missing skill detection verified.
+- [x] **API tests**: `GET /jobs` returns `match_score`, sorting verified, RLS isolation confirmed.
+- [x] **Frontend**: `npm run build` passes with 0 errors.
 
 ---
 

@@ -46,6 +46,8 @@ class ApplicationItem(BaseModel):
     tailored_resume: Optional[str] = None
     applied_at: Optional[str] = None
     created_at: Optional[str] = None
+    match_score: Optional[float] = None
+    missing_skills: Optional[List[str]] = None
 
 
 @router.post("/apply", response_model=ApplicationItem, summary="Apply to a job")
@@ -99,6 +101,8 @@ async def apply_to_job(
             tailored_resume=saved.get("tailored_resume"),
             applied_at=saved.get("applied_at"),
             created_at=saved.get("created_at"),
+            match_score=saved.get("match_score"),
+            missing_skills=saved.get("missing_skills"),
         )
     except HTTPException:
         raise
@@ -141,6 +145,8 @@ async def list_applications(
                     tailored_resume=row.get("tailored_resume"),
                     applied_at=row.get("applied_at"),
                     created_at=row.get("created_at"),
+                    match_score=row.get("match_score"),
+                    missing_skills=row.get("missing_skills"),
                 )
             )
         return items
@@ -191,6 +197,8 @@ async def update_status(
             tailored_resume=updated.get("tailored_resume"),
             applied_at=updated.get("applied_at"),
             created_at=updated.get("created_at"),
+            match_score=updated.get("match_score"),
+            missing_skills=updated.get("missing_skills"),
         )
     except HTTPException:
         raise
