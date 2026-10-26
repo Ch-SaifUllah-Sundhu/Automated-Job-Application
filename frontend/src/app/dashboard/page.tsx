@@ -2,12 +2,12 @@
 
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { api, ApplicationItem, JobItem } from "@/lib/api";
 import {
   LogOut,
   User,
-  Shield,
   Briefcase,
   FileText,
   Search,
@@ -18,11 +18,8 @@ import {
   Bell,
   Sparkles,
   Zap,
-  Filter,
   Plus,
   ArrowUpRight,
-  ExternalLink,
-  ChevronRight,
   X,
   Check,
   Building,
@@ -30,140 +27,157 @@ import {
   Clock,
   Layers,
   BarChart3,
-  Settings,
-  HelpCircle,
   FolderKanban,
-  Target,
   ArrowRight,
   Copy,
   Edit3,
   RefreshCw,
+  ChevronRight,
+  ExternalLink,
 } from "lucide-react";
 
-interface JobItem {
+// ── Kanban Stage Config ─────────────────────────────────────────────────────
+const STAGE_CONFIG: {
   id: string;
-  title: string;
-  company: string;
-  location: string;
-  portal: string;
-  matchScore: number;
-  stage: "discovered" | "tailored" | "applied" | "interview";
-  postedAt: string;
-  salary: string;
-  coverLetterSnippet: string;
-  skills: string[];
-}
-
-const INITIAL_JOBS: JobItem[] = [
+  label: string;
+  colorClass: string;
+  badgeClass: string;
+  apiStatus: string; // maps to backend application.status
+}[] = [
   {
-    id: "job-1",
-    title: "Senior Full Stack Engineer",
-    company: "Stripe",
-    location: "Remote (Global)",
-    portal: "Greenhouse",
-    matchScore: 96,
-    stage: "tailored",
-    postedAt: "2h ago",
-    salary: "$165,000 - $215,000",
-    skills: ["Next.js", "TypeScript", "FastAPI", "PostgreSQL", "Tailwind CSS"],
-    coverLetterSnippet:
-      "Dear Stripe Engineering Directors, With extensive experience architecting distributed backends and high-velocity Next.js web applications, I have consistently delivered robust zero-downtime platforms. My technical background in PostgreSQL schema design, API security, and high-throughput transaction flows aligns closely with Stripe's payments scalability standards.",
+    id: "Found",
+    label: "Discovered",
+    apiStatus: "Found",
+    colorClass: "border-blue-500/40 text-blue-400 bg-blue-500/10",
+    badgeClass: "bg-blue-500/15 text-blue-400 border border-blue-500/30",
   },
   {
-    id: "job-2",
-    title: "AI Solutions Architect",
-    company: "Anthropic Ecosystem",
-    location: "San Francisco, CA (Hybrid)",
-    portal: "Lever",
-    matchScore: 93,
-    stage: "discovered",
-    postedAt: "4h ago",
-    salary: "$180,000 - $240,000",
-    skills: ["LangGraph", "Python", "Llama 3", "Vector DBs", "RAG"],
-    coverLetterSnippet:
-      "Dear Talent Acquisition Lead, I am thrilled to submit my credentials for the AI Solutions Architect role. Bringing proven experience orchestrating LangGraph multi-agent pipelines, custom tool abstractions, and real-time LLM inference, I engineer mission-critical autonomous agents with deterministic guardrails.",
+    id: "Applied",
+    label: "Applied",
+    apiStatus: "Applied",
+    colorClass: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
+    badgeClass: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
   },
   {
-    id: "job-3",
-    title: "Lead Frontend Engineer",
-    company: "Vercel",
-    location: "Remote",
-    portal: "LinkedIn",
-    matchScore: 89,
-    stage: "applied",
-    postedAt: "1d ago",
-    salary: "$150,000 - $190,000",
-    skills: ["React 19", "Next.js App Router", "SSR", "Design Systems"],
-    coverLetterSnippet:
-      "To the Engineering Team at Vercel, Having built enterprise Next.js App Router applications with strict SSR optimization, fluid glassmorphic micro-interactions, and custom design systems, I thrive on crafting frictionless developer experiences and high-performance web products.",
+    id: "Interview",
+    label: "Interviewing",
+    apiStatus: "Interview",
+    colorClass: "border-purple-500/40 text-purple-400 bg-purple-500/10",
+    badgeClass: "bg-purple-500/15 text-purple-400 border border-purple-500/30",
   },
   {
-    id: "job-4",
-    title: "Backend Cloud Specialist",
-    company: "Datadog",
-    location: "New York, NY",
-    portal: "Indeed",
-    matchScore: 84,
-    stage: "interview",
-    postedAt: "3d ago",
-    salary: "$170,000 - $220,000",
-    skills: ["FastAPI", "Redis", "Celery", "PostgreSQL", "Docker"],
-    coverLetterSnippet:
-      "Dear Hiring Team, I specialize in high-throughput FastAPI and PostgreSQL architectures, managing complex caching tiers and automated asynchronous task queues. My experience building resilient telemetry pipelines directly fits Datadog's infrastructure requirements.",
+    id: "Offer",
+    label: "Offer",
+    apiStatus: "Offer",
+    colorClass: "border-amber-500/40 text-amber-400 bg-amber-500/10",
+    badgeClass: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
   },
 ];
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function timeAgo(dateStr?: string | null): string {
+  if (!dateStr) return "—";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+// ── Component ───────────────────────────────────────────────────────────────
 export default function DashboardPage() {
-  const { user, signOut, loading } = useAuth();
+  const { user, signOut, loading: authLoading, getAccessToken } = useAuth();
   const router = useRouter();
 
-  // Navigation states
-  const [activeNav, setActiveNav] = useState<"pipeline" | "documents" | "settings">("pipeline");
+  // ── UI States ──────────────────────────────────────────────────────────
   const [loggingOut, setLoggingOut] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notificationsList, setNotificationsList] = useState([
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<"success" | "error">("success");
+
+  // ── Application Pipeline State ─────────────────────────────────────────
+  const [applications, setApplications] = useState<ApplicationItem[]>([]);
+  const [jobs, setJobs] = useState<JobItem[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [selectedApp, setSelectedApp] = useState<ApplicationItem | null>(null);
+  const [editingCoverLetter, setEditingCoverLetter] = useState(false);
+  const [coverLetterDraft, setCoverLetterDraft] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [savingCoverLetter, setSavingCoverLetter] = useState(false);
+
+  // ── Search & Filter ────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState("");
+  const [newSearchRole, setNewSearchRole] = useState("");
+  const [newSearchLocation, setNewSearchLocation] = useState("Remote");
+  const [searchingRemote, setSearchingRemote] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [movingId, setMovingId] = useState<string | null>(null);
+
+  // ── Notifications (static for now — Module 8 adds Supabase Realtime) ──
+  const [notificationsList] = useState([
     {
       id: "n-1",
       title: "Llama 3 Tailoring Engine Active",
       desc: "Ready to synthesize bespoke documents for any opening.",
-      time: "Just now",
+      time: "System",
       read: false,
     },
     {
       id: "n-2",
-      title: "10+ ATS Portals Synchronized",
-      desc: "DuckDuckGo scraper rate limits configured with back-off.",
-      time: "10m ago",
+      title: "10+ ATS Portals Ready",
+      desc: "DuckDuckGo aggregator configured with exponential back-off.",
+      time: "System",
       read: false,
     },
   ]);
 
-  // Toast feedback
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const tokenRef = useRef<string | null>(null);
 
-  const showToast = (msg: string) => {
+  // ── Toast helper ───────────────────────────────────────────────────────
+  const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+    setToastType(type);
+    setTimeout(() => setToastMessage(null), 3800);
+  }, []);
 
-  // Job Board state
-  const [jobsList, setJobsList] = useState<JobItem[]>(INITIAL_JOBS);
-  const [selectedJob, setSelectedJob] = useState<JobItem | null>(null);
-  const [editingCoverLetter, setEditingCoverLetter] = useState(false);
-  const [coverLetterDraft, setCoverLetterDraft] = useState("");
-  const [copied, setCopied] = useState(false);
+  // ── Fetch data ─────────────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
+    setLoadingData(true);
+    setDataError(null);
+    try {
+      const token = await getAccessToken();
+      tokenRef.current = token;
+      if (!token) return;
 
-  // Search & Filter state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedPortal, setSelectedPortal] = useState("all");
-  const [newSearchRole, setNewSearchRole] = useState("");
-  const [newSearchLocation, setNewSearchLocation] = useState("Remote");
-  const [searchingRemote, setSearchingRemote] = useState(false);
+      const [appsRes, jobsRes] = await Promise.all([
+        api.getApplications(token),
+        api.getJobs(token, 1, 50),
+      ]);
 
+      setApplications(Array.isArray(appsRes) ? appsRes : []);
+      setJobs(Array.isArray(jobsRes.jobs) ? jobsRes.jobs : []);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load pipeline data";
+      setDataError(msg);
+    } finally {
+      setLoadingData(false);
+    }
+  }, [getAccessToken]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      fetchData();
+    }
+  }, [authLoading, fetchData]);
+
+  // ── Event handlers ─────────────────────────────────────────────────────
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
@@ -177,68 +191,71 @@ export default function DashboardPage() {
 
   const handleDeleteAccount = async () => {
     setDeletingAccount(true);
-    setTimeout(async () => {
-      try {
-        await signOut();
-        router.push("/signup?message=Account+successfully+deleted");
-      } catch (err) {
-        console.error("Delete account error:", err);
-      } finally {
-        setDeletingAccount(false);
-        setShowDeleteModal(false);
-      }
-    }, 1000);
+    try {
+      await signOut();
+      router.push("/signup?message=Account+successfully+deleted");
+    } catch (err) {
+      console.error("Delete account error:", err);
+    } finally {
+      setDeletingAccount(false);
+      setShowDeleteModal(false);
+    }
   };
 
-  const handleTriggerSearch = (e: React.FormEvent) => {
+  /** Trigger LangGraph job search + document generation pipeline */
+  const handleTriggerSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSearchRole.trim()) return;
-
     setSearchingRemote(true);
-    setTimeout(() => {
-      const created: JobItem = {
-        id: `job-${Date.now()}`,
-        title: newSearchRole,
-        company: "Remote Placements Tech",
-        location: newSearchLocation || "Global Remote",
-        portal: "DuckDuckGo Aggregator",
-        matchScore: Math.floor(Math.random() * 10) + 89,
-        stage: "discovered",
-        postedAt: "Just now",
-        salary: "$145,000 - $195,000",
-        skills: ["TypeScript", "Full Stack", "APIs", "Cloud"],
-        coverLetterSnippet: `Dear Hiring Team, I am submitting my candidacy for the ${newSearchRole} position. With a strong track record building robust full-stack software and autonomous workflows, I look forward to contributing immediately to your engineering goals.`,
-      };
-      setJobsList((prev) => [created, ...prev]);
-      setSearchingRemote(false);
+    setSearchError(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Session expired — please log in again.");
+      const result = await api.searchJobs(token, newSearchRole.trim(), newSearchLocation || "Remote");
       setShowSearchModal(false);
       setNewSearchRole("");
-      showToast(`Discovered new opening: "${created.title}"`);
-    }, 1200);
+      showToast(`AI agent found ${result.jobs_found} matching opportunities!`);
+      // Refresh both applications and jobs lists
+      await fetchData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Search failed";
+      setSearchError(msg);
+      showToast(msg, "error");
+    } finally {
+      setSearchingRemote(false);
+    }
   };
 
-  const moveJobStage = (jobId: string, nextStage: JobItem["stage"]) => {
-    setJobsList((prev) =>
-      prev.map((j) => (j.id === jobId ? { ...j, stage: nextStage } : j))
-    );
-    showToast(`Application moved to ${nextStage.toUpperCase()} stage`);
-  };
+  /** Move an application to a new Kanban status and persist to backend */
+  const moveAppStatus = useCallback(
+    async (appId: string, newStatus: string) => {
+      setMovingId(appId);
+      // Optimistic update
+      setApplications((prev) =>
+        prev.map((a) => (a.id === appId ? { ...a, status: newStatus } : a))
+      );
+      try {
+        const token = await getAccessToken();
+        if (!token) throw new Error("Session expired");
+        await api.updateApplicationStatus(token, appId, newStatus);
+        showToast(`Moved to ${newStatus} stage`);
+      } catch (err: unknown) {
+        // Rollback on failure
+        await fetchData();
+        const msg = err instanceof Error ? err.message : "Status update failed";
+        showToast(msg, "error");
+      } finally {
+        setMovingId(null);
+      }
+    },
+    [getAccessToken, fetchData, showToast]
+  );
 
-  const handleOpenJobModal = (job: JobItem) => {
-    setSelectedJob(job);
-    setCoverLetterDraft(job.coverLetterSnippet);
+  const handleOpenAppModal = (app: ApplicationItem) => {
+    setSelectedApp(app);
+    setCoverLetterDraft(app.cover_letter || "");
     setEditingCoverLetter(false);
     setCopied(false);
-  };
-
-  const handleSaveCoverLetter = () => {
-    if (!selectedJob) return;
-    setJobsList((prev) =>
-      prev.map((j) => (j.id === selectedJob.id ? { ...j, coverLetterSnippet: coverLetterDraft } : j))
-    );
-    setSelectedJob((prev) => prev ? { ...prev, coverLetterSnippet: coverLetterDraft } : null);
-    setEditingCoverLetter(false);
-    showToast("Tailored cover letter saved successfully.");
   };
 
   const handleCopyCoverLetter = () => {
@@ -246,67 +263,87 @@ export default function DashboardPage() {
     navigator.clipboard.writeText(coverLetterDraft);
     setCopied(true);
     showToast("Cover letter copied to clipboard!");
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 2500);
   };
 
-  const filteredJobs = jobsList.filter((job) => {
-    const query = searchQuery.toLowerCase();
-    const matchesQuery =
-      job.title.toLowerCase().includes(query) ||
-      job.company.toLowerCase().includes(query) ||
-      job.skills.some((s) => s.toLowerCase().includes(query));
-    const matchesPortal = selectedPortal === "all" || job.portal.toLowerCase() === selectedPortal.toLowerCase();
-    return matchesQuery && matchesPortal;
+  /** Save edited cover letter back to the application record */
+  const handleSaveCoverLetter = async () => {
+    if (!selectedApp) return;
+    setSavingCoverLetter(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Session expired");
+      // We update via the applyToJob upsert so cover_letter is persisted
+      await api.applyToJob(token, selectedApp.job_id, {
+        cover_letter: coverLetterDraft,
+        status: selectedApp.status,
+      });
+      setApplications((prev) =>
+        prev.map((a) =>
+          a.id === selectedApp.id ? { ...a, cover_letter: coverLetterDraft } : a
+        )
+      );
+      setSelectedApp((prev) =>
+        prev ? { ...prev, cover_letter: coverLetterDraft } : null
+      );
+      setEditingCoverLetter(false);
+      showToast("Cover letter saved successfully.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Save failed";
+      showToast(msg, "error");
+    } finally {
+      setSavingCoverLetter(false);
+    }
+  };
+
+  // ── Derived data ───────────────────────────────────────────────────────
+  const filteredApps = applications.filter((app) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (app.job_title?.toLowerCase().includes(q) ?? false) ||
+      (app.company?.toLowerCase().includes(q) ?? false)
+    );
   });
 
-  const stages: { id: JobItem["stage"]; label: string; count: number; colorClass: string; badgeClass: string }[] = [
-    {
-      id: "discovered",
-      label: "Discovered",
-      count: filteredJobs.filter((j) => j.stage === "discovered").length,
-      colorClass: "border-blue-500/40 text-blue-400 bg-blue-500/10",
-      badgeClass: "bg-blue-500/15 text-blue-400 border border-blue-500/30",
-    },
-    {
-      id: "tailored",
-      label: "AI Tailored",
-      count: filteredJobs.filter((j) => j.stage === "tailored").length,
-      colorClass: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
-      badgeClass: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
-    },
-    {
-      id: "applied",
-      label: "Applied",
-      count: filteredJobs.filter((j) => j.stage === "applied").length,
-      colorClass: "border-purple-500/40 text-purple-400 bg-purple-500/10",
-      badgeClass: "bg-purple-500/15 text-purple-400 border border-purple-500/30",
-    },
-    {
-      id: "interview",
-      label: "Interviewing",
-      count: filteredJobs.filter((j) => j.stage === "interview").length,
-      colorClass: "border-amber-500/40 text-amber-400 bg-amber-500/10",
-      badgeClass: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
-    },
-  ];
+  const countByStatus = (status: string) =>
+    filteredApps.filter((a) => a.status === status).length;
 
-  if (loading) {
+  const totalApps = applications.length;
+  const appliedCount = applications.filter((a) =>
+    ["Applied", "Interview", "Offer"].includes(a.status)
+  ).length;
+
+  // ── Loading / Auth gate ────────────────────────────────────────────────
+  if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#0B0F19] text-[#E2E8F0] flex items-center justify-center font-sans">
+      <div className="min-h-screen bg-[#0B0F19] text-[#E2E8F0] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-6 h-6 animate-spin text-[#2563EB]" />
-          <span className="text-xs text-[#94A3B8]">Loading authenticated workspace...</span>
+          <span className="text-xs text-[#94A3B8]">Loading authenticated workspace…</span>
         </div>
       </div>
     );
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen w-full bg-[#0B0F19] text-[#E2E8F0] flex font-sans selection:bg-[#2563EB]/30 selection:text-white">
-      {/* Toast Notification */}
+
+      {/* Toast */}
       {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 p-3 rounded bg-[#111827] border border-[#2563EB] text-white text-xs shadow-xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div
+          className={`fixed top-5 right-5 z-50 p-3 rounded border text-white text-xs shadow-xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 ${
+            toastType === "error"
+              ? "bg-[#1a0808] border-red-700"
+              : "bg-[#111827] border-[#2563EB]"
+          }`}
+        >
+          {toastType === "error" ? (
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          )}
           <span>{toastMessage}</span>
           <button onClick={() => setToastMessage(null)} className="ml-2 text-[#94A3B8] hover:text-white">
             <X className="w-3.5 h-3.5" />
@@ -314,10 +351,10 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Left Sidebar Navigation */}
+      {/* ── Left Sidebar ──────────────────────────────────────────────────── */}
       <aside className="w-60 border-r border-[#1F2937] bg-[#0B0F19] flex flex-col justify-between shrink-0 hidden md:flex">
         <div>
-          {/* Brand Header */}
+          {/* Brand */}
           <div className="p-4 border-b border-[#1F2937] flex items-center gap-3">
             <Link href="/" className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-xs tracking-wider">
@@ -332,16 +369,9 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* Nav List */}
+          {/* Nav */}
           <nav className="p-3 space-y-1">
-            <button
-              onClick={() => setActiveNav("pipeline")}
-              className={`w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium transition-colors cursor-pointer ${
-                activeNav === "pipeline"
-                  ? "bg-[#161F33] text-white font-semibold border-l-2 border-[#2563EB]"
-                  : "text-[#94A3B8] hover:text-white hover:bg-[#111827]"
-              }`}
-            >
+            <button className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-semibold bg-[#161F33] text-white border-l-2 border-[#2563EB] cursor-pointer">
               <FolderKanban className="w-4 h-4 text-[#2563EB]" />
               <span>Job Pipeline</span>
             </button>
@@ -351,7 +381,7 @@ export default function DashboardPage() {
               className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors"
             >
               <FileText className="w-4 h-4 text-[#94A3B8]" />
-              <span>Resume & Profile</span>
+              <span>Resume &amp; Profile</span>
             </Link>
 
             <button
@@ -369,26 +399,26 @@ export default function DashboardPage() {
           </nav>
         </div>
 
-        {/* Sidebar Footer - Real User & Owner Attribution */}
+        {/* Sidebar Footer */}
         <div className="p-3 border-t border-[#1F2937] bg-[#0B0F19]">
           <div className="p-2.5 rounded bg-[#111827] border border-[#1F2937] mb-2.5">
             <div className="text-[10px] uppercase font-bold text-[#64748B] tracking-wider mb-0.5">
               Platform Architect
             </div>
             <p className="text-xs font-medium text-white">Chaudhry Saif Ullah Sundhu</p>
-            <p className="text-[10px] text-[#94A3B8]">Founder & Lead Engineer</p>
+            <p className="text-[10px] text-[#94A3B8]">Founder &amp; Lead Engineer</p>
           </div>
 
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-2 truncate">
               <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-[11px]">
-                {user?.email ? user.email.slice(0, 2).toUpperCase() : "CS"}
+                {user?.email ? user.email.slice(0, 2).toUpperCase() : "JP"}
               </div>
               <div className="truncate">
                 <p className="text-[11px] font-medium text-white truncate">
-                  {user?.user_metadata?.full_name || "Saif Ullah"}
+                  {user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User"}
                 </p>
-                <p className="text-[10px] text-[#64748B] truncate">{user?.email || "saif@example.com"}</p>
+                <p className="text-[10px] text-[#64748B] truncate">{user?.email || ""}</p>
               </div>
             </div>
 
@@ -398,15 +428,20 @@ export default function DashboardPage() {
               title="Sign Out"
               className="p-1.5 rounded hover:bg-[#1F2937] text-[#94A3B8] hover:text-red-400 transition-colors cursor-pointer"
             >
-              {loggingOut ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" /> : <LogOut className="w-3.5 h-3.5" />}
+              {loggingOut ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
+              ) : (
+                <LogOut className="w-3.5 h-3.5" />
+              )}
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Main Workspace */}
+      {/* ── Main Workspace ────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        {/* Top Header Bar */}
+
+        {/* Top Header */}
         <header className="h-14 border-b border-[#1F2937] bg-[#0B0F19]/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30">
           <div className="flex items-center gap-3 flex-1 max-w-md">
             <div className="relative w-full">
@@ -415,14 +450,22 @@ export default function DashboardPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search pipeline by role, company, or tech stack..."
+                placeholder="Filter pipeline by role or company…"
                 className="w-full h-8 pl-8 pr-3 bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded text-xs text-white placeholder-[#64748B] outline-none transition-colors"
               />
             </div>
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Search Jobs Trigger */}
+            <button
+              onClick={() => fetchData()}
+              disabled={loadingData}
+              title="Refresh pipeline"
+              className="w-8 h-8 rounded bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] flex items-center justify-center text-[#94A3B8] hover:text-white transition-colors cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingData ? "animate-spin" : ""}`} />
+            </button>
+
             <button
               onClick={() => setShowSearchModal(true)}
               className="h-8 px-3 rounded bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -431,7 +474,7 @@ export default function DashboardPage() {
               <span>Search Opportunities</span>
             </button>
 
-            {/* Notifications Dropdown */}
+            {/* Notifications */}
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
@@ -446,13 +489,10 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#1F2937]">
                     <span className="text-xs font-semibold text-white">System Events</span>
                     <button
-                      onClick={() => {
-                        setNotificationsList((prev) => prev.map((n) => ({ ...n, read: true })));
-                        showToast("All notifications marked as read.");
-                      }}
+                      onClick={() => setShowNotifications(false)}
                       className="text-[10px] text-[#2563EB] hover:underline"
                     >
-                      Mark all as read
+                      Dismiss
                     </button>
                   </div>
                   <div className="space-y-2 text-xs">
@@ -472,15 +512,20 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* Content Area */}
+        {/* Content */}
         <main className="p-6 space-y-6">
-          {/* Metric KPI Tiles */}
+
+          {/* KPI Tiles */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             <div className="p-4 rounded-lg bg-[#111827] border border-[#1F2937] flex items-center justify-between">
               <div>
-                <span className="text-xs font-medium text-[#94A3B8]">Scraped Jobs</span>
-                <div className="text-xl font-bold text-white mt-1">{jobsList.length}</div>
-                <span className="text-[10px] text-emerald-400 font-medium block mt-0.5">Live Portal Opportunities</span>
+                <span className="text-xs font-medium text-[#94A3B8]">Total Applications</span>
+                <div className="text-xl font-bold text-white mt-1">
+                  {loadingData ? <Loader2 className="w-4 h-4 animate-spin text-[#2563EB]" /> : totalApps}
+                </div>
+                <span className="text-[10px] text-emerald-400 font-medium block mt-0.5">
+                  {jobs.length} jobs in database
+                </span>
               </div>
               <div className="w-9 h-9 rounded bg-[#2563EB]/15 border border-[#2563EB]/30 flex items-center justify-center text-[#2563EB]">
                 <Briefcase className="w-4 h-4" />
@@ -489,27 +534,31 @@ export default function DashboardPage() {
 
             <div className="p-4 rounded-lg bg-[#111827] border border-[#1F2937] flex items-center justify-between">
               <div>
-                <span className="text-xs font-medium text-[#94A3B8]">Tailored Documents</span>
+                <span className="text-xs font-medium text-[#94A3B8]">Active Pipeline</span>
                 <div className="text-xl font-bold text-white mt-1">
-                  {jobsList.filter((j) => j.stage === "tailored").length}
+                  {loadingData ? <Loader2 className="w-4 h-4 animate-spin text-[#2563EB]" /> : appliedCount}
                 </div>
-                <span className="text-[10px] text-emerald-400 font-medium block mt-0.5">Llama 3 Synthesized</span>
+                <span className="text-[10px] text-emerald-400 font-medium block mt-0.5">Applied + Interviewing</span>
               </div>
               <div className="w-9 h-9 rounded bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                <Sparkles className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4" />
               </div>
             </div>
 
             <div className="p-4 rounded-lg bg-[#111827] border border-[#1F2937] flex items-center justify-between">
               <div>
-                <span className="text-xs font-medium text-[#94A3B8]">Active Pipeline</span>
+                <span className="text-xs font-medium text-[#94A3B8]">Interviews</span>
                 <div className="text-xl font-bold text-white mt-1">
-                  {jobsList.filter((j) => j.stage === "applied" || j.stage === "interview").length}
+                  {loadingData ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-[#2563EB]" />
+                  ) : (
+                    applications.filter((a) => a.status === "Interview").length
+                  )}
                 </div>
-                <span className="text-[10px] text-purple-400 font-medium block mt-0.5">Applied & Interviewing</span>
+                <span className="text-[10px] text-purple-400 font-medium block mt-0.5">In-progress interviews</span>
               </div>
               <div className="w-9 h-9 rounded bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                <CheckCircle2 className="w-4 h-4" />
+                <BarChart3 className="w-4 h-4" />
               </div>
             </div>
 
@@ -528,36 +577,38 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* Kanban Section Header & Filters */}
+          {/* Pipeline Section */}
           <div className="space-y-3.5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold text-white">Candidate Application Board</h2>
-                <p className="text-xs text-[#94A3B8]">Review match scores, tailored documents, and track pipeline status.</p>
-              </div>
-
-              {/* Portal Source Filter */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#94A3B8]">Portal Filter:</span>
-                <select
-                  value={selectedPortal}
-                  onChange={(e) => setSelectedPortal(e.target.value)}
-                  className="h-8 px-2.5 rounded bg-[#111827] border border-[#1F2937] text-xs text-white outline-none cursor-pointer"
-                >
-                  <option value="all">All Portals</option>
-                  <option value="greenhouse">Greenhouse</option>
-                  <option value="lever">Lever</option>
-                  <option value="linkedin">LinkedIn</option>
-                  <option value="indeed">Indeed</option>
-                  <option value="duckduckgo aggregator">DuckDuckGo</option>
-                </select>
+                <h2 className="text-sm font-semibold text-white">Application Pipeline</h2>
+                <p className="text-xs text-[#94A3B8]">
+                  {loadingData
+                    ? "Loading your live pipeline…"
+                    : dataError
+                    ? `Error: ${dataError}`
+                    : `${totalApps} applications tracked across all stages.`}
+                </p>
               </div>
             </div>
 
-            {/* 4 Stage Kanban Columns */}
+            {/* Data Error Banner */}
+            {dataError && !loadingData && (
+              <div className="p-3 rounded bg-red-950/20 border border-red-800/50 text-xs text-red-300 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>
+                  Backend connection issue: {dataError}.{" "}
+                  <button onClick={fetchData} className="underline hover:text-red-200">
+                    Retry
+                  </button>
+                </span>
+              </div>
+            )}
+
+            {/* Kanban Board */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
-              {stages.map((col) => {
-                const colJobs = filteredJobs.filter((j) => j.stage === col.id);
+              {STAGE_CONFIG.map((col) => {
+                const colApps = filteredApps.filter((a) => a.status === col.apiStatus);
                 return (
                   <div
                     key={col.id}
@@ -569,9 +620,10 @@ export default function DashboardPage() {
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${col.colorClass}`}>
                           {col.label}
                         </span>
-                        <span className="text-xs text-[#94A3B8] font-mono">({colJobs.length})</span>
+                        <span className="text-xs text-[#94A3B8] font-mono">
+                          ({loadingData ? "…" : colApps.length})
+                        </span>
                       </div>
-
                       <button
                         type="button"
                         onClick={() => setShowSearchModal(true)}
@@ -582,87 +634,107 @@ export default function DashboardPage() {
                       </button>
                     </div>
 
-                    {/* Cards Container */}
+                    {/* Cards */}
                     <div className="space-y-2.5 flex-1 overflow-y-auto">
-                      {colJobs.length === 0 ? (
+                      {loadingData ? (
+                        <div className="h-24 flex items-center justify-center">
+                          <Loader2 className="w-4 h-4 animate-spin text-[#64748B]" />
+                        </div>
+                      ) : colApps.length === 0 ? (
                         <div className="h-32 rounded border border-dashed border-[#1F2937] flex flex-col items-center justify-center text-center p-3">
                           <span className="text-xs text-[#64748B]">No items in {col.label}</span>
+                          {col.id === "Found" && (
+                            <button
+                              onClick={() => setShowSearchModal(true)}
+                              className="mt-2 text-[10px] text-[#2563EB] hover:underline"
+                            >
+                              + Search opportunities
+                            </button>
+                          )}
                         </div>
                       ) : (
-                        colJobs.map((job) => (
+                        colApps.map((app) => (
                           <div
-                            key={job.id}
-                            onClick={() => handleOpenJobModal(job)}
+                            key={app.id}
+                            onClick={() => handleOpenAppModal(app)}
                             className="p-3 rounded bg-[#111827] hover:bg-[#161F33] border border-[#1F2937] hover:border-[#2563EB]/50 transition-colors cursor-pointer space-y-2.5 group shadow-sm"
                           >
                             <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <span className="text-[10px] uppercase font-bold text-[#60A5FA]">
-                                  {job.portal}
-                                </span>
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#2563EB]/15 text-[#60A5FA] border border-[#2563EB]/30">
-                                  {job.matchScore}% Match
-                                </span>
-                              </div>
                               <h3 className="text-xs font-semibold text-white group-hover:text-[#60A5FA] transition-colors leading-snug">
-                                {job.title}
+                                {app.job_title || "Untitled Role"}
                               </h3>
                               <p className="text-[11px] text-[#94A3B8] flex items-center gap-1 mt-0.5">
                                 <Building className="w-3 h-3 text-[#64748B]" />
-                                {job.company}
+                                {app.company || "—"}
                               </p>
-                            </div>
-
-                            {/* Skills Chips */}
-                            <div className="flex flex-wrap gap-1">
-                              {job.skills.slice(0, 3).map((skill, idx) => (
-                                <span
-                                  key={idx}
-                                  className="px-1.5 py-0.5 rounded text-[9px] bg-[#0B0F19] border border-[#1F2937] text-[#94A3B8]"
+                              {app.url && (
+                                <a
+                                  href={app.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-[10px] text-[#2563EB] hover:underline flex items-center gap-0.5 mt-0.5"
                                 >
-                                  {skill}
-                                </span>
-                              ))}
+                                  View posting <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              )}
                             </div>
 
                             <div className="flex items-center justify-between text-[10px] text-[#64748B] pt-2 border-t border-[#1F2937]">
-                              <span>{job.salary}</span>
-                              <div className="flex items-center gap-1 text-[#94A3B8]">
-                                <Clock className="w-3 h-3" />
-                                <span>{job.postedAt}</span>
-                              </div>
+                              <span>Applied {timeAgo(app.applied_at || app.created_at)}</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${col.badgeClass}`}>
+                                {app.review_status || "pending"}
+                              </span>
                             </div>
 
-                            {/* Column Transition Action Button */}
-                            <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-                              {job.stage === "discovered" && (
+                            {/* Stage Action */}
+                            <div className="pt-0.5" onClick={(e) => e.stopPropagation()}>
+                              {col.id === "Found" && (
                                 <button
-                                  type="button"
-                                  onClick={() => moveJobStage(job.id, "tailored")}
-                                  className="w-full h-7 rounded bg-[#0B0F19] hover:bg-[#2563EB] border border-[#1F2937] hover:border-[#2563EB] text-[10px] font-medium text-white transition-colors cursor-pointer flex items-center justify-center gap-1"
+                                  disabled={movingId === app.id}
+                                  onClick={() => moveAppStatus(app.id, "Applied")}
+                                  className="w-full h-7 rounded bg-[#0B0F19] hover:bg-[#2563EB] border border-[#1F2937] hover:border-[#2563EB] text-[10px] font-medium text-white transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
                                 >
-                                  <Sparkles className="w-3 h-3 text-emerald-400" />
-                                  <span>Tailor with Llama 3 →</span>
+                                  {movingId === app.id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                      <span>Mark Applied →</span>
+                                    </>
+                                  )}
                                 </button>
                               )}
-                              {job.stage === "tailored" && (
+                              {col.id === "Applied" && (
                                 <button
-                                  type="button"
-                                  onClick={() => moveJobStage(job.id, "applied")}
-                                  className="w-full h-7 rounded bg-emerald-950/40 hover:bg-emerald-600 border border-emerald-800/80 text-[10px] font-medium text-emerald-300 hover:text-white transition-colors cursor-pointer flex items-center justify-center gap-1"
+                                  disabled={movingId === app.id}
+                                  onClick={() => moveAppStatus(app.id, "Interview")}
+                                  className="w-full h-7 rounded bg-purple-950/40 hover:bg-purple-600 border border-purple-800/80 text-[10px] font-medium text-purple-300 hover:text-white transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
                                 >
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  <span>Submit Application →</span>
+                                  {movingId === app.id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Briefcase className="w-3 h-3" />
+                                      <span>Move to Interview →</span>
+                                    </>
+                                  )}
                                 </button>
                               )}
-                              {job.stage === "applied" && (
+                              {col.id === "Interview" && (
                                 <button
-                                  type="button"
-                                  onClick={() => moveJobStage(job.id, "interview")}
-                                  className="w-full h-7 rounded bg-purple-950/40 hover:bg-purple-600 border border-purple-800/80 text-[10px] font-medium text-purple-300 hover:text-white transition-colors cursor-pointer flex items-center justify-center gap-1"
+                                  disabled={movingId === app.id}
+                                  onClick={() => moveAppStatus(app.id, "Offer")}
+                                  className="w-full h-7 rounded bg-amber-950/40 hover:bg-amber-600 border border-amber-800/80 text-[10px] font-medium text-amber-300 hover:text-white transition-colors cursor-pointer flex items-center justify-center gap-1 disabled:opacity-50"
                                 >
-                                  <Briefcase className="w-3 h-3" />
-                                  <span>Move to Interview →</span>
+                                  {movingId === app.id ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Zap className="w-3 h-3" />
+                                      <span>Mark Offer Received →</span>
+                                    </>
+                                  )}
                                 </button>
                               )}
                             </div>
@@ -676,15 +748,15 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Account Danger Zone */}
+          {/* Danger Zone */}
           <div className="rounded-lg border border-red-900/40 bg-red-950/10 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
               <h4 className="text-xs font-semibold text-red-400 flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                <span>Account Purge & Compliance</span>
+                <span>Account Purge &amp; Compliance</span>
               </h4>
               <p className="mt-0.5 text-xs text-[#94A3B8]">
-                Permanently purge your candidate specifications, ingested resume embeddings, and application records.
+                Permanently purge your candidate specifications, ingested resume, and all application records.
               </p>
             </div>
             <button
@@ -698,24 +770,35 @@ export default function DashboardPage() {
         </main>
       </div>
 
-      {/* MODAL 1: Search Opportunities Modal */}
+      {/* ── MODAL: Search Opportunities ──────────────────────────────────── */}
       {showSearchModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#111827] border border-[#1F2937] rounded-lg max-w-md w-full p-6 shadow-xl animate-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-[#1F2937]">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                 <Search className="w-4 h-4 text-[#2563EB]" />
-                <span>Query Job Opportunities</span>
+                <span>Run AI Job Search</span>
               </h3>
               <button onClick={() => setShowSearchModal(false)} className="text-[#94A3B8] hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleTriggerSearch} className="mt-4 space-y-3.5">
+            <p className="text-xs text-[#94A3B8] mt-3 mb-4 leading-relaxed">
+              The Llama 3 agent will search 10+ portals via DuckDuckGo, select the best match, and generate a tailored cover letter and resume — saved directly to your pipeline.
+            </p>
+
+            {searchError && (
+              <div className="mb-3 p-2.5 rounded bg-red-950/30 border border-red-800/60 text-xs text-red-300 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                <span>{searchError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleTriggerSearch} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-medium text-[#CBD5E1] mb-1.5">
-                  Target Role Title or Tech Stack
+                  Target Role / Tech Stack *
                 </label>
                 <input
                   type="text"
@@ -723,20 +806,20 @@ export default function DashboardPage() {
                   autoFocus
                   value={newSearchRole}
                   onChange={(e) => setNewSearchRole(e.target.value)}
-                  placeholder="e.g. Lead React Engineer, Cloud Architect..."
+                  placeholder="e.g. Senior React Engineer, Python Backend Developer…"
                   className="w-full h-9 px-3 bg-[#0B0F19] border border-[#1F2937] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded text-xs text-white placeholder-[#64748B] outline-none"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-[#CBD5E1] mb-1.5">
-                  Target Geographic Location
+                  Location
                 </label>
                 <input
                   type="text"
                   value={newSearchLocation}
                   onChange={(e) => setNewSearchLocation(e.target.value)}
-                  placeholder="e.g. Remote, US, Global..."
+                  placeholder="Remote, US, Pakistan, Global…"
                   className="w-full h-9 px-3 bg-[#0B0F19] border border-[#1F2937] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded text-xs text-white placeholder-[#64748B] outline-none"
                 />
               </div>
@@ -744,7 +827,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1F2937]">
                 <button
                   type="button"
-                  onClick={() => setShowSearchModal(false)}
+                  onClick={() => { setShowSearchModal(false); setSearchError(null); }}
                   className="h-8 px-3.5 rounded bg-[#0B0F19] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-medium text-[#CBD5E1] transition-colors cursor-pointer"
                 >
                   Cancel
@@ -752,16 +835,16 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={searchingRemote}
-                  className="h-8 px-4 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  className="h-8 px-4 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
                 >
                   {searchingRemote ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Scraping Portals...</span>
+                      <span>Searching Portals…</span>
                     </>
                   ) : (
                     <>
-                      <span>Run Search</span>
+                      <span>Run AI Search</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </>
                   )}
@@ -772,25 +855,34 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* MODAL 2: Tailored Document & Application Details Drawer */}
-      {selectedJob && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+      {/* ── MODAL: Application Detail ─────────────────────────────────────── */}
+      {selectedApp && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#111827] border border-[#1F2937] rounded-lg max-w-xl w-full p-6 shadow-xl animate-in zoom-in-95">
             <div className="flex items-start justify-between pb-3.5 border-b border-[#1F2937]">
               <div>
-                <span className="text-[10px] uppercase font-bold text-[#60A5FA] tracking-wider">
-                  {selectedJob.portal} Verified Position
-                </span>
-                <h2 className="text-base font-semibold text-white mt-0.5">{selectedJob.title}</h2>
-                <p className="text-xs text-[#94A3B8]">{selectedJob.company} · {selectedJob.location}</p>
+                <h2 className="text-base font-semibold text-white">{selectedApp.job_title || "Application"}</h2>
+                <p className="text-xs text-[#94A3B8] mt-0.5">
+                  {selectedApp.company || "—"}
+                  {selectedApp.url && (
+                    <a
+                      href={selectedApp.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 text-[#2563EB] hover:underline inline-flex items-center gap-0.5"
+                    >
+                      View Posting <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </p>
               </div>
-              <button onClick={() => setSelectedJob(null)} className="text-[#94A3B8] hover:text-white">
+              <button onClick={() => setSelectedApp(null)} className="text-[#94A3B8] hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="mt-4 space-y-3.5">
-              {/* Document Tailoring Area */}
+              {/* Cover Letter */}
               <div className="p-3.5 rounded bg-[#0B0F19] border border-[#1F2937]">
                 <div className="flex items-center justify-between text-xs mb-2">
                   <span className="font-semibold text-white flex items-center gap-1.5">
@@ -828,81 +920,91 @@ export default function DashboardPage() {
                     <div className="flex justify-end">
                       <button
                         type="button"
+                        disabled={savingCoverLetter}
                         onClick={handleSaveCoverLetter}
-                        className="h-7 px-3 rounded bg-[#2563EB] text-white text-xs font-medium cursor-pointer"
+                        className="h-7 px-3 rounded bg-[#2563EB] text-white text-xs font-medium cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
                       >
+                        {savingCoverLetter ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : null}
                         Save Draft
                       </button>
                     </div>
                   </div>
-                ) : (
+                ) : coverLetterDraft ? (
                   <p className="text-xs text-[#CBD5E1] leading-relaxed italic bg-[#111827] p-3 rounded border border-[#1F2937]">
-                    "{selectedJob.coverLetterSnippet}"
+                    &ldquo;{coverLetterDraft.slice(0, 400)}{coverLetterDraft.length > 400 ? "…" : ""}&rdquo;
+                  </p>
+                ) : (
+                  <p className="text-xs text-[#64748B] italic p-3">
+                    No cover letter generated yet. Run a job search to generate tailored documents.
                   </p>
                 )}
               </div>
 
-              {/* Match Score & Metrics */}
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="p-3 rounded bg-[#0B0F19] border border-[#1F2937]">
-                  <span className="text-[10px] text-[#64748B] block">SEMANTIC MATCH</span>
-                  <span className="text-lg font-bold text-emerald-400">{selectedJob.matchScore}%</span>
+              {/* Tailored Resume Bullets */}
+              {selectedApp.tailored_resume && (
+                <div className="p-3.5 rounded bg-[#0B0F19] border border-[#1F2937]">
+                  <span className="text-xs font-semibold text-white flex items-center gap-1.5 mb-2">
+                    <FileText className="w-3.5 h-3.5 text-[#60A5FA]" />
+                    <span>Tailored Resume Bullets</span>
+                  </span>
+                  <p className="text-xs text-[#CBD5E1] leading-relaxed whitespace-pre-wrap">
+                    {selectedApp.tailored_resume.slice(0, 600)}
+                    {selectedApp.tailored_resume.length > 600 ? "…" : ""}
+                  </p>
                 </div>
-                <div className="p-3 rounded bg-[#0B0F19] border border-[#1F2937]">
-                  <span className="text-[10px] text-[#64748B] block">COMPENSATION</span>
-                  <span className="text-lg font-bold text-white">{selectedJob.salary}</span>
-                </div>
-              </div>
-            </div>
+              )}
 
-            <div className="mt-5 pt-3.5 border-t border-[#1F2937] flex items-center justify-between">
-              {/* Move Stage Selector */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-[#94A3B8]">Move to:</span>
+              {/* Stage selector */}
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-[#94A3B8]">Move stage:</span>
                 <select
-                  value={selectedJob.stage}
+                  value={selectedApp.status}
                   onChange={(e) => {
-                    const stg = e.target.value as JobItem["stage"];
-                    moveJobStage(selectedJob.id, stg);
-                    setSelectedJob({ ...selectedJob, stage: stg });
+                    const newStatus = e.target.value;
+                    moveAppStatus(selectedApp.id, newStatus);
+                    setSelectedApp({ ...selectedApp, status: newStatus });
                   }}
                   className="h-7 px-2 rounded bg-[#0B0F19] border border-[#1F2937] text-xs text-white outline-none cursor-pointer"
                 >
-                  <option value="discovered">Discovered</option>
-                  <option value="tailored">AI Tailored</option>
-                  <option value="applied">Applied</option>
-                  <option value="interview">Interviewing</option>
+                  <option value="Found">Discovered</option>
+                  <option value="Applied">Applied</option>
+                  <option value="Interview">Interviewing</option>
+                  <option value="Offer">Offer</option>
+                  <option value="Rejected">Rejected</option>
                 </select>
               </div>
+            </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedJob(null)}
-                  className="h-8 px-3.5 rounded bg-[#0B0F19] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-medium text-[#CBD5E1] transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    moveJobStage(selectedJob.id, "applied");
-                    setSelectedJob(null);
-                  }}
-                  className="h-8 px-3.5 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <span>Submit Application</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+            <div className="mt-5 pt-3.5 border-t border-[#1F2937] flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedApp(null)}
+                className="h-8 px-3.5 rounded bg-[#0B0F19] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-medium text-[#CBD5E1] transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                disabled={movingId === selectedApp.id}
+                onClick={async () => {
+                  await moveAppStatus(selectedApp.id, "Applied");
+                  setSelectedApp(null);
+                }}
+                className="h-8 px-3.5 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
+              >
+                <span>Mark as Applied</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 3: Upgrade to Pro Modal */}
+      {/* ── MODAL: Upgrade to Pro ──────────────────────────────────────────── */}
       {showUpgradeModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#111827] border border-[#1F2937] rounded-lg max-w-lg w-full p-6 shadow-xl animate-in zoom-in-95">
             <div className="flex items-center justify-between pb-3 border-b border-[#1F2937]">
               <div className="flex items-center gap-2">
@@ -916,7 +1018,7 @@ export default function DashboardPage() {
 
             <div className="mt-4 space-y-3 text-xs">
               <p className="text-[#94A3B8] leading-relaxed">
-                Unlock autonomous Playwright submissions, unlimited daily job searches, and custom interview prep.
+                Unlock autonomous Playwright submissions, unlimited daily job searches, and custom interview prep — powered by Llama 3.
               </p>
 
               <div className="p-4 rounded bg-[#0B0F19] border border-[#2563EB]/40 space-y-3">
@@ -925,22 +1027,18 @@ export default function DashboardPage() {
                   <span className="font-bold text-emerald-400 text-sm">$29 / month</span>
                 </div>
                 <div className="space-y-2 text-[#CBD5E1]">
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Unlimited daily searches across 10+ job portals</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Autonomous Playwright headless submissions</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Unlimited Groq Llama 3 document tailoring</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Chrome Extension 1-click autofill integration</span>
-                  </div>
+                  {[
+                    "Unlimited daily searches across 10+ job portals",
+                    "Autonomous Playwright headless application submissions",
+                    "Unlimited Groq Llama 3 document tailoring",
+                    "Mock interview prep with 13 tailored questions",
+                    "Chrome Extension 1-click autofill (LinkedIn, Greenhouse, Lever)",
+                  ].map((feat, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>{feat}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -957,7 +1055,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => {
                   setShowUpgradeModal(false);
-                  showToast("Module 10 (Stripe Integration) will process live checkouts.");
+                  showToast("Stripe integration arriving in Module 10 — billing system coming soon!");
                 }}
                 className="h-8 px-4 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer"
               >
@@ -969,16 +1067,16 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* MODAL 4: Delete Account Confirmation */}
+      {/* ── MODAL: Delete Account ──────────────────────────────────────────── */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-[#111827] border border-red-800/80 rounded-lg max-w-md w-full p-6 shadow-xl animate-in zoom-in-95">
             <div className="flex items-center gap-3 text-red-400 mb-3">
               <AlertTriangle className="w-5 h-5 shrink-0" />
               <h3 className="text-sm font-semibold text-white">Permanently Delete Account?</h3>
             </div>
             <p className="text-xs text-[#94A3B8] leading-relaxed">
-              This action cannot be undone. All candidate specifications, tailored resumes, and telemetry records will be permanently removed.
+              This action cannot be undone. All candidate specifications, tailored resumes, and application records will be permanently removed from the database.
             </p>
 
             <div className="mt-5 flex items-center justify-end gap-2 pt-3 border-t border-[#1F2937]">
@@ -999,7 +1097,7 @@ export default function DashboardPage() {
                 {deletingAccount ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Deleting...</span>
+                    <span>Deleting…</span>
                   </>
                 ) : (
                   <span>Yes, Delete Everything</span>

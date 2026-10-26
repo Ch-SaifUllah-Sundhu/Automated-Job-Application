@@ -17,7 +17,8 @@ Automate job discovery, resume/cover letter tailoring, and application submissio
 | **Job Persistence** — Save found jobs to Supabase | ✅ Done | 4 |
 | **REST API** — FastAPI endpoints for frontend integration | ✅ Done | 5 |
 | **Auth** — Supabase Auth, Google/GitHub SSO, OTP & Password Reset | ✅ Done | 6 |
-| **Dashboard** — Next.js Kanban board for application tracking | 🏃 Next | 7 |
+| **Semantic Scoring** — Sentence-BERT (`all-MiniLM-L6-v2`) + pgvector match % | 🏃 Next | 7 |
+| **Kanban Dashboard** — Dynamic 5-stage drag-and-drop tracking (@dnd-kit) | 🏃 Next | 7 |
 | **Automation** — Playwright scripts to submit applications | ⬜ Planned | 8-9 |
 
 ### 4. Non-Functional Requirements

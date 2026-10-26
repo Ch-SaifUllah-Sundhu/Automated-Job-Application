@@ -16,7 +16,7 @@
 full job application lifecycle end-to-end:
 
 1. **Search** — query 10+ job portals via DuckDuckGo (Module 4 ✅)
-2. **Score** — compute TF-IDF cosine similarity match % (Module 7)
+2. **Score** — compute Sentence-BERT semantic embeddings (`all-MiniLM-L6-v2`) + Supabase pgvector match % (Module 7)
 3. **Tailor** — generate cover letters + resume bullets via Groq/Llama 3 (Module 4 ✅)
 4. **Review** — human-in-loop approval before submission (Module 8)
 5. **Submit** — headless Playwright automation (Module 9)
@@ -36,10 +36,10 @@ combines all four pillars — Search, Score, Tailor, Submit — in one product.
 | LLM | Groq / llama3-8b-8192 | via langchain-groq ≥1.1 |
 | Job Search | DuckDuckGo Search | duckduckgo-search ≥8.1 |
 | Backend | FastAPI + Uvicorn | ≥0.143 / ≥0.54 |
-| Database | Supabase (PostgreSQL + RLS) | supabase-py ≥2.32 |
+| Database | Supabase (PostgreSQL + RLS + pgvector) | supabase-py ≥2.32 |
+| Semantic Matching | Sentence-BERT (`all-MiniLM-L6-v2`) + pgvector | Module 7 |
 | Task Queue | Celery + Redis | celery ≥5.3, redis ≥5.0 |
 | Headless Browser | Playwright + playwright-stealth | Module 9 |
-| NLP Scoring | scikit-learn + NLTK | Module 7 |
 | Frontend | Next.js TypeScript + Tailwind | in `/frontend` |
 | UI Components | shadcn/ui + @dnd-kit/core | Module 7 |
 | Auth | Supabase Auth (OAuth + Email) | Module 6 |
@@ -78,7 +78,8 @@ combines all four pillars — Search, Score, Tailor, Submit — in one product.
 │   │
 │   ├── services/          ← Business logic, no HTTP concerns (Module 5+)
 │   │   ├── agent_service.py
-│   │   ├── match_service.py
+│   │   ├── embedding_service.py   ← SBERT vectorizer (Module 7)
+│   │   ├── match_service.py       ← Semantic cosine similarity scorer (Module 7)
 │   │   ├── resume_parser.py
 │   │   ├── stripe_service.py
 │   │   └── notification_service.py
@@ -202,12 +203,24 @@ All consumed via `python-dotenv`. Path: `load_dotenv("../.env")` from inside `ba
 | payload | JSONB | |
 | is_read | BOOLEAN | default false |
 
-### Alterations to `applications` (add these columns)
+### Vector & Semantic Matching Schema (Module 7)
 ```sql
-ALTER TABLE applications ADD COLUMN IF NOT EXISTS missing_fields  JSONB;
+-- Enable PostgreSQL Vector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Dense 384-dimensional embeddings (Sentence-BERT all-MiniLM-L6-v2)
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS embedding vector(384);
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS embedding vector(384);
+
+-- Application match tracking & missing skill gaps
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS match_score     NUMERIC(5,2);
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS missing_skills  JSONB;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS missing_fields  JSONB; -- Module 8 form fields
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS review_status   TEXT DEFAULT 'pending';
 -- review_status: 'pending' | 'approved' | 'rejected'
+
+-- High-performance HNSW vector index for cosine distance
+CREATE INDEX IF NOT EXISTS idx_jobs_embedding ON jobs USING hnsw (embedding vector_cosine_ops);
 ```
 
 **RLS:** All tables have RLS enabled. Full policy SQL in `schema.sql`.
@@ -221,10 +234,10 @@ ALTER TABLE applications ADD COLUMN IF NOT EXISTS review_status   TEXT DEFAULT '
 search_jobs → draft_documents → save_to_database → END
 ```
 
-### To be expanded in Module 8
+### Module 7 & 8 Expanded Pipeline
 ```
-search_jobs → draft_documents → detect_missing_fields
-           → [HUMAN INTERRUPT] → save_to_database → END
+search_jobs → detect_missing_skills → draft_documents
+           → [HUMAN INTERRUPT (Module 8)] → save_to_database → END
 ```
 
 The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
@@ -289,10 +302,9 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
   - [x] `backend/routers/profile.py` — `GET/PUT /profile`, `POST /profile/resume`
   - [x] `backend/services/resume_parser.py` — PDF + DOCX parser
   - [x] `backend/main.py` — refactored application factory with modular routers
-  - [x] Fixed Bug B2 & Bug B3
-  - [x] 39 tests passing across all suites
-- [ ] Update `requirements.txt` with: `pydantic-settings`, `pdfminer.six`, `python-docx`, `python-multipart`
-- [ ] Tests: `backend/tests/test_auth.py` + `test_applications.py`
+  - [x] 40 tests passing cleanly across all suites (`pytest -v`)
+  - [x] Updated `requirements.txt` with: `pydantic-settings`, `pdfminer.six`, `python-docx`, `python-multipart`
+  - [x] Comprehensive test suites: `backend/tests/test_auth.py`, `test_applications.py`, `test_jobs.py`, `test_profile.py`
 
 ---
 
@@ -317,17 +329,36 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
 
 ---
 
-### ⬜ Module 7 — Job Dashboard & Match Scoring
+### 🏃 Module 7 — Job Dashboard & Semantic Match Scoring
 
-- [ ] `backend/services/match_service.py` — TF-IDF + cosine similarity scorer (scikit-learn + NLTK)
-- [ ] `GET /jobs` endpoint — include `match_score` per job
-- [ ] New LangGraph node `detect_missing_fields` — diffs JD skills vs resume; sets `state["missing_fields"]`
-- [ ] `frontend/src/app/dashboard/jobs/page.tsx` — job listing, search, filter
-- [ ] `frontend/src/components/jobs/JobCard.tsx` — match score ring (SVG, color-coded)
-- [ ] `frontend/src/components/jobs/MatchBadge.tsx` — animated circular progress
-- [ ] `frontend/src/app/dashboard/page.tsx` — Kanban board (Found/Applied/Interview/Offer)
-- [ ] `npm install @dnd-kit/core @dnd-kit/sortable` — drag-and-drop Kanban
-- [ ] Update `requirements.txt`: `scikit-learn>=1.4.0`, `nltk>=3.8.0`
+> **Design change (2026-10-24):** TF-IDF + NLTK replaced by embedding-based semantic matching (Sentence-BERT `all-MiniLM-L6-v2`) stored in Supabase pgvector. SBERT captures semantic context, synonyms, and paraphrasing that word-frequency models miss. A secondary skill-overlap score provides explainability.
+
+**7A. Vector storage (pgvector)**
+- [ ] **Migration**: Enable `vector` extension; add `embedding vector(384)` to `profiles` and `jobs`; add `match_score` (numeric), `missing_skills` (jsonb) to `applications`. Update `schema.sql`.
+- [ ] **Index**: Create HNSW index with `vector_cosine_ops` on `jobs.embedding`; verify RLS policies scope rows per user.
+- [ ] **Re-embed trigger**: Recompute profile embedding whenever a resume is uploaded or profile is updated (hook into `POST /profile/resume`).
+
+**7B. Embedding & match services**
+- [ ] **Embedding Service**: Create `backend/services/embedding_service.py` using `sentence-transformers` (`all-MiniLM-L6-v2`, 384 dims). Batch-encode and chunk resumes/JDs by section.
+- [ ] **Match Scorer**: Create `backend/services/match_service.py` — cosine similarity between resume and JD chunk embeddings, aggregated to a calibrated 0–100 score; weighted blend with skill-overlap score.
+- [ ] **Match API**: Update `GET /jobs` to return `match_score` per job for authenticated user; support `sort=match_score`.
+- [ ] **Dependencies**: Add `sentence-transformers` to `requirements.txt`.
+
+**7C. Agent: missing skills**
+- [ ] **Missing Skills Node**: Add `detect_missing_skills` node to LangGraph pipeline — Groq extracts JD skills, compared to candidate skills by embedding similarity threshold (e.g. "JS" vs "JavaScript"). Emits `missing_skills[]` to `AgentState`.
+- [ ] **Naming distinction**: Keep `detect_missing_fields` (form input fields) reserved for Module 8's review modal.
+
+**7D. Frontend**
+- [ ] **Job Listing Page**: Build `frontend/src/app/dashboard/jobs/page.tsx` with debounced keyword, location, and portal filters with `sort=match_score`.
+- [ ] **Job Card Component**: Build `frontend/src/components/jobs/JobCard.tsx` with color-coded match score SVG ring and missing-skills chips.
+- [ ] **Kanban Board**: Build dynamic drag-and-drop Kanban in `frontend/src/app/dashboard/page.tsx` across 5 stages (Discovered, Applied, Interview, Offer, Rejected) using `@dnd-kit`.
+- [ ] **Status Persistence**: Wire column transitions to `PATCH /applications/{id}/status` with optimistic updates and error rollback.
+
+**7E. Tests & verification**
+- [ ] **Scoring tests**: Synonym pairs score high, unrelated job scores low, 0–100 calibration verified.
+- [ ] **Skill-gap tests**: Alias handling and missing skill detection verified.
+- [ ] **API tests**: `GET /jobs` returns `match_score`, sorting verified, RLS isolation confirmed.
+- [ ] **Frontend**: `npm run build` passes with 0 errors.
 
 ---
 
@@ -401,7 +432,7 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
 | Job searches / day | 3 | Unlimited |
 | Document drafts (total) | 5 | Unlimited |
 | Automated submissions | 0 | Unlimited |
-| Match scoring | Basic | Full TF-IDF |
+| Match scoring | Basic Keyword | Full Semantic SBERT + pgvector |
 | Interview prep | 0 | Unlimited |
 | Chrome Extension | ✗ | ✓ |
 

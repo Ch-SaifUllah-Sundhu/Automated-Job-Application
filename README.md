@@ -13,16 +13,18 @@
 
 1. **Multi-Portal Job Search**: Autonomous search across 10+ job platforms (LinkedIn, Indeed, Greenhouse, Lever, etc.) using DuckDuckGo Search API with 3x retry exponential back-off.
 2. **AI Document Tailoring**: Llama 3 (via Groq API) crafts bespoke cover letters and targeted resume bullets matching specific job descriptions.
-3. **Enterprise Identity & Auth**:
+3. **Semantic Match Scoring (SBERT + pgvector)**: Dense vector embeddings (`all-MiniLM-L6-v2`, 384 dimensions) with HNSW cosine similarity ranking opportunities against the candidate's resume and identifying missing skills.
+4. **Enterprise Identity & Auth**:
    - Google & GitHub Single Sign-On (SSO) with Supabase Auth.
    - Corporate Email/Password authentication.
    - 6-Digit Email OTP verification flow on first-time registration.
    - Token-based self-service Password Reset (`/forgot-password` & `/reset-password`).
-4. **Hardened Security**:
+5. **Hardened Security**:
    - Zero-trust route protection in Next.js Middleware blocking all unauthenticated access to workspace pages.
    - Pure key isolation (zero secret or LLM API keys exposed in client bundles).
    - Supabase PostgreSQL Row Level Security (RLS) across all user tables.
-5. **Interactive Telemetry Dashboard**:
+6. **Interactive Telemetry Dashboard**:
+   - Dynamic Kanban board with 5 pipeline stages (Discovered, Applied, Interview, Offer, Rejected).
    - Real-time application metrics, quota counters, and user session controls.
    - Danger Zone account termination with full cascade data deletion.
 
@@ -35,7 +37,8 @@
 | **Frontend** | Next.js 16 (App Router), React, TypeScript | Dark-mode Enterprise UI |
 | **Backend** | FastAPI + Uvicorn | Python 3.11+, Pydantic Settings |
 | **AI Engine** | LangGraph + LangChain Groq | Llama 3-8B model inference |
-| **Database** | Supabase (PostgreSQL 15+) | RLS, JWT Auth, Cascade Triggers |
+| **Semantic Matching** | Sentence-BERT + pgvector | `all-MiniLM-L6-v2` (384-dim), HNSW Cosine Index |
+| **Database** | Supabase (PostgreSQL 15+) | RLS, JWT Auth, pgvector, Cascade Triggers |
 | **Search** | DuckDuckGo Search (`ddgs`) | Deduplication + Rate-limit protection |
 | **Testing** | Pytest | 40 Unit, Smoke, & Integration tests |
 
@@ -51,7 +54,7 @@
 | **Module 4** | Core LangGraph AI Pipeline | ✅ Completed |
 | **Module 5** | FastAPI Backend Auth & Modular Routers | ✅ Completed (40/40 Tests Pass) |
 | **Module 6** | Frontend Auth, OTP, OAuth, & Onboarding | ✅ Completed (Build 0 Errors) |
-| **Module 7** | Smart Match Scoring & Kanban Board | 🏃 Next Milestone |
+| **Module 7** | Semantic Match Scoring (SBERT + pgvector) & Kanban | 🏃 In Progress |
 | **Module 8** | Human-in-Loop Review & Celery Tasks | ⬜ Planned |
 | **Module 9** | Playwright Automation Engine | ⬜ Planned |
 | **Module 10** | Stripe Subscriptions & Usage Quotas | ⬜ Planned |

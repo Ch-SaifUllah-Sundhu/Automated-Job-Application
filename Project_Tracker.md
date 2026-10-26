@@ -2,7 +2,8 @@
 
 > **Project:** Job Application Assistant (SaaS)  
 > **Source of Truth:** [AGENTS.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/AGENTS.md) & [Architecture.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/Architecture.md)  
-> **Last Updated:** 2026-10-11  
+> **Last Updated:** 2026-10-24  
+> **Current Focus:** Module 7 (Semantic Match Scoring & Kanban Board) 🏃
 
 ---
 
@@ -47,7 +48,7 @@
 - [x] **Main App Refactor**: Refactor `backend/main.py` into application factory registering modular routers.
 - [x] **Bug B2 Fix**: Enforce `get_current_user` auth dependency across all private endpoints.
 - [x] **Bug B3 Fix**: Pass authenticated `user_id` into `AgentState` and save `applications` row in agent.
-- [x] **Tests**: Comprehensive test suite (39 tests passing cleanly across `test_auth.py`, `test_applications.py`, `test_profile.py`, `test_jobs.py`, and `test_agent.py`).
+- [x] **Tests**: Comprehensive test suite (40 tests passing cleanly across `test_auth.py`, `test_applications.py`, `test_profile.py`, `test_jobs.py`, and `test_agent.py`).
 
 ### Module 6: Frontend Auth & Enterprise Identity [✅ Completed]
 - [x] Install Supabase client dependencies (`@supabase/supabase-js`, `@supabase/ssr`, `lucide-react`).
@@ -64,13 +65,37 @@
 - [x] Enhance `frontend/src/app/auth/callback/route.ts` with error redirection and `next` parameter support.
 - [x] Verify production build (`npm run build` completed with 0 errors).
 
-### Module 7: Job Dashboard & Smart Match Scoring [⬜ Planned]
-- [ ] **Match Scorer**: Create `backend/services/match_service.py` using TF-IDF + Cosine Similarity (`scikit-learn` & `nltk`).
-- [ ] **Match API**: Update `GET /jobs` to calculate and return `match_score` per job against user's resume.
-- [ ] **Missing Skills Node**: Add `detect_missing_fields` node to LangGraph pipeline.
-- [ ] **Job Listing Page**: Build `frontend/src/app/dashboard/jobs/page.tsx` with search filters and sorting.
-- [ ] **Job Card Component**: Build `frontend/src/components/jobs/JobCard.tsx` with color-coded match score SVG ring.
-- [ ] **Kanban Board**: Build `frontend/src/app/dashboard/page.tsx` with `@dnd-kit` drag-and-drop columns (Found, Applied, Interview, Offer, Rejected).
+### Module 7: Job Dashboard & Semantic Match Scoring [🏃 In Progress]
+
+> **Design change (2026-10-24):** TF-IDF + NLTK replaced by embedding-based semantic matching (Sentence-BERT) stored in Supabase pgvector. TF-IDF only sees shared words, so it misses synonyms and paraphrases; SBERT outperformed it in resume–job ranking studies. A lightweight skill-overlap score is kept as a secondary signal for explainability.
+
+**7A. Vector storage (pgvector)**
+- [ ] **Migration**: Enable the `vector` extension; add `embedding vector(384)` to `profiles` and `jobs`; add `match_score` (numeric), `missing_skills` (text[] / jsonb) to `applications` (or a `job_matches` table). Update `schema.sql`.
+- [ ] **Index**: Create HNSW index with `vector_cosine_ops` on `jobs.embedding`; verify RLS policies still scope rows per user.
+- [ ] **Re-embed trigger**: Recompute the profile embedding whenever a resume is uploaded or the profile is updated (hook into `POST /profile/resume`).
+
+**7B. Embedding & match services**
+- [ ] **Embedding Service**: Create `backend/services/embedding_service.py` using `sentence-transformers` (`all-MiniLM-L6-v2`, 384 dims). Load the model once at startup, batch-encode, and chunk resumes/JDs by section (the model truncates long inputs). Run heavy encoding in the worker, not the request path.
+- [ ] **Match Scorer**: Create `backend/services/match_service.py` — cosine similarity between resume and JD chunk embeddings, aggregated and calibrated to a 0–100 score; optional weighted blend with a skill-overlap score.
+- [ ] **Match API**: Update `GET /jobs` to return `match_score` per job for the authenticated user; support `sort=match_score`.
+- [ ] **Dependencies**: Add `sentence-transformers` to `requirements.txt` (use CPU-only PyTorch to keep the install small); remove `nltk`/`scikit-learn` unless still needed.
+
+**7C. Agent: missing skills**
+- [ ] **Missing Skills Node**: Add `detect_missing_skills` node to the LangGraph pipeline — Groq extracts JD skills as structured output, then each is compared to the candidate's skills by embedding similarity (threshold) so "JS" vs "JavaScript" is not flagged as a gap. Returns `missing_skills[]` into `AgentState`.
+- [ ] **Naming note**: Keep `detect_missing_fields` (form fields) reserved for Module 8's Missing Data Modal; do not reuse it here.
+
+**7D. Frontend**
+- [ ] **Job Listing Page**: Build `frontend/src/app/dashboard/jobs/page.tsx` with debounced keyword, location, and portal filters (applied server-side) and sort by match score.
+- [ ] **Job Card Component**: Build `frontend/src/components/jobs/JobCard.tsx` with color-coded match score SVG ring and missing-skills chips.
+- [ ] **Kanban Package Decision**: Choose `@dnd-kit/react` (new API) or legacy `@dnd-kit/core` + `@dnd-kit/sortable` + `@dnd-kit/utilities`; pin the version and follow the matching docs (the APIs differ significantly).
+- [ ] **Kanban Board**: Build `frontend/src/app/dashboard/page.tsx` with 5 drag-and-drop columns (Discovered, Applied, Interview, Offer, Rejected), mapped one-to-one to the `applications` status enum.
+- [ ] **Status Persistence**: Wire drops to `PATCH /applications/{id}/status` with optimistic updates and rollback on error.
+
+**7E. Tests & verification**
+- [ ] **Scoring tests**: Synonym pairs score high, unrelated job scores low, score stays within calibrated 0–100 range.
+- [ ] **Skill-gap tests**: Alias handling ("JS"/"JavaScript"), truly missing skill is flagged.
+- [ ] **API tests**: `GET /jobs` returns `match_score`, sorting works, RLS prevents cross-user access.
+- [ ] **Frontend**: `npm run build` passes with 0 errors; manual Kanban drag test on desktop and touch.
 
 ### Module 8: Dynamic Application + Human-in-Loop Review [⬜ Planned]
 - [ ] **LangGraph Interrupt**: Configure checkpointer breakpoint after `draft_documents` awaiting human approval.
@@ -78,8 +103,8 @@
 - [ ] **Automation Task Skeleton**: Create `backend/workers/tasks/automation_task.py`.
 - [ ] **Approve Endpoint**: Implement `PATCH /applications/{id}/approve` to trigger Celery task.
 - [ ] **Review Page**: Build `frontend/src/app/dashboard/review/[id]/page.tsx` (side-by-side JD vs tailored document editing).
-- [ ] **Missing Data Modal**: Modal to prompt user for missing fields (manual input or Groq auto-generate).
-- [ ] **Supabase Realtime**: Live updates on application status changes in frontend.
+- [ ] **Missing Data Modal**: Modal to prompt user for missing fields (manual input or Groq auto-generate); backed by a `detect_missing_fields` node.
+- [ ] **Supabase Realtime**: Live updates on application status changes in frontend (also refreshes the Module 7 Kanban).
 
 ### Module 9: Playwright Automation Engine [⬜ Planned]
 - [ ] Install Playwright and Chromium dependencies (`playwright`, `playwright-stealth`).

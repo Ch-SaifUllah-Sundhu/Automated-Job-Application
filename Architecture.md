@@ -36,8 +36,8 @@ graph TD
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   1. SEARCH     │ ──> │    2. SCORE     │ ──> │   3. TAILOR     │ ──> │   4. SUBMIT     │
-│ DuckDuckGo API  │     │ TF-IDF + Cosine │     │ Groq / Llama 3  │     │ Human Review +  │
-│ 10+ Portals     │     │ Skill Matching  │     │ Resume & Cover  │     │ Playwright Auto │
+│ DuckDuckGo API  │     │ Sentence-BERT + │     │ Groq / Llama 3  │     │ Human Review +  │
+│ 10+ Portals     │     │ pgvector Match  │     │ Resume & Cover  │     │ Playwright Auto │
 └─────────────────┘     └─────────────────┘     └─────────────────┘     └─────────────────┘
 ```
 
@@ -46,12 +46,12 @@ graph TD
 ## 3. Component Breakdown
 
 ### 3.1 Frontend (`frontend/`)
-- **Framework**: Next.js 14+ (App Router), TypeScript, Tailwind CSS, shadcn/ui.
+- **Framework**: Next.js 16 (App Router), TypeScript, Tailwind CSS, shadcn/ui.
 - **State & Data**: Supabase SSR Auth, SWR / React Query, `@dnd-kit` for Kanban board.
 - **Key Modules**:
-  - `(auth)`: Login & Signup with OAuth (Google, LinkedIn).
+  - `(auth)`: Login & Signup with OAuth (Google, GitHub) + 6-digit OTP verification.
   - `onboarding`: Multi-step profile setup & resume parser upload.
-  - `dashboard`: Kanban tracking (Found / Applied / Interview / Offer / Rejected).
+  - `dashboard`: Dynamic Kanban tracking (Discovered / Applied / Interview / Offer / Rejected).
   - `review/[id]`: Side-by-side human-in-the-loop application review before submission.
   - `billing`: Stripe customer portal and subscription management.
 
@@ -59,7 +59,7 @@ graph TD
 - **Framework**: FastAPI (Async) + Uvicorn.
 - **Structure**:
   - `routers/`: Modular route handlers (`auth`, `jobs`, `applications`, `profile`, `subscriptions`, `interview`).
-  - `services/`: Encapsulated business logic (`agent_service`, `match_service`, `resume_parser`, `stripe_service`).
+  - `services/`: Encapsulated business logic (`agent_service`, `embedding_service`, `match_service`, `resume_parser`, `stripe_service`).
   - `dependencies.py`: Supabase JWT auth verification (`get_current_user`), tier authorization (`require_pro_tier`).
   - `config.py`: Environment validation using `pydantic-settings`.
 
@@ -67,10 +67,10 @@ graph TD
 - **Engine**: LangGraph state machine.
 - **Workflow**:
   ```
-  search_jobs ──> draft_documents ──> detect_missing_fields
-                    ──> [HUMAN INTERRUPT REVIEW] ──> save_to_database ──> END
+  search_jobs ──> detect_missing_skills ──> draft_documents ──> detect_missing_fields
+                    ──> [HUMAN INTERRUPT REVIEW (Module 8)] ──> save_to_database ──> END
   ```
-- **Models**: Groq (`llama3-8b-8192`) for sub-second document drafting.
+- **Models**: Groq (`llama3-8b-8192`) for sub-second document drafting; `sentence-transformers` (`all-MiniLM-L6-v2`) for dense embeddings.
 
 ### 3.4 Automation & Workers (`backend/workers/`)
 - **Queue**: Celery with Redis broker for asynchronous job handling.
@@ -78,7 +78,7 @@ graph TD
 - **Safety**: CAPTCHA detection pauses automation and alerts user.
 
 ### 3.5 Database & Auth (`Supabase`)
-- **PostgreSQL**: Multi-tenant isolation using Row Level Security (RLS) policies on all tables.
+- **PostgreSQL**: Multi-tenant isolation using Row Level Security (RLS) policies on all tables, plus `pgvector` dense vector indexing (`vector(384)`, HNSW cosine operator).
 - **Tables**: `profiles`, `jobs`, `applications`, `subscriptions`, `automation_logs`, `interview_sessions`, `notifications`.
 - **Storage**: Screenshot audit trails stored in Supabase Storage (`automation-screenshots`).
 

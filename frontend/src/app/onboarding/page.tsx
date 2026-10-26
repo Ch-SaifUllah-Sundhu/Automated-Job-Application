@@ -60,10 +60,11 @@ export default function OnboardingPage() {
         await api.updateProfile(token, {
           full_name: fullName,
           phone,
-          target_title: targetTitle,
-          location,
-          experience_level: experienceLevel,
         });
+        if (typeof window !== "undefined") {
+          if (targetTitle) localStorage.setItem("jobpilot_target_title", targetTitle);
+          if (location) localStorage.setItem("jobpilot_target_location", location);
+        }
       }
       setStep(2);
     } catch (err: unknown) {
@@ -99,7 +100,7 @@ export default function OnboardingPage() {
 
       if (useManualText && manualResumeText.trim()) {
         await api.updateProfile(token, {
-          resume_text: manualResumeText,
+          base_resume_text: manualResumeText,
         });
         setStep(3);
       } else if (resumeFile) {

@@ -1,3 +1,11 @@
+/**
+ * frontend/src/lib/api.ts
+ * =======================
+ * Centralised HTTP client for all communication with the FastAPI backend.
+ * All API calls across the application MUST go through this module;
+ * never call fetch() inline in components.
+ */
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -39,63 +47,155 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
   return response.json();
 }
 
-export const api = {
-  // Auth & Profile
-  getProfile: (token: string) =>
-    request<{ profile: Record<string, any> }>("/profile", { token }),
+// ── Type definitions ────────────────────────────────────────────────────────
 
-  updateProfile: (token: string, data: Record<string, any>) =>
-    request<{ profile: Record<string, any> }>("/profile", {
+export interface ProfileData {
+  id: string;
+  full_name?: string | null;
+  phone?: string | null;
+  linkedin_url?: string | null;
+  github_url?: string | null;
+  base_resume_text?: string | null;
+}
+
+export interface JobItem {
+  id: string;
+  title: string;
+  company: string;
+  url: string;
+  description?: string | null;
+  source?: string | null;
+  created_at?: string | null;
+}
+
+export interface JobListResponse {
+  jobs: JobItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface ApplicationItem {
+  id: string;
+  job_id: string;
+  job_title?: string | null;
+  company?: string | null;
+  url?: string | null;
+  status: string;
+  review_status?: string | null;
+  cover_letter?: string | null;
+  tailored_resume?: string | null;
+  applied_at?: string | null;
+  created_at?: string | null;
+}
+
+export interface JobSearchResponse {
+  status: string;
+  jobs_found: number;
+  selected_job?: Record<string, unknown> | null;
+  cover_letter: string;
+  tailored_resume: string;
+  error?: string | null;
+}
+
+export interface ResumeUploadResponse {
+  filename: string;
+  characters_extracted: number;
+  preview: string;
+  base_resume_text: string;
+}
+
+// ── API surface ─────────────────────────────────────────────────────────────
+
+export const api = {
+  // ── Auth & Profile ──────────────────────────────────────────────────────
+
+  getMe: (token: string) =>
+    request<ProfileData>("/auth/me", { token }),
+
+  getProfile: (token: string) =>
+    request<ProfileData>("/profile", { token }),
+
+  updateProfile: (token: string, data: Partial<ProfileData>) =>
+    request<ProfileData>("/profile", {
       token,
       method: "PUT",
       body: JSON.stringify(data),
     }),
 
-  uploadResume: (token: string, file: File) => {
+  uploadResume: (token: string, file: File): Promise<ResumeUploadResponse> => {
     const formData = new FormData();
     formData.append("file", file);
-    return request<{ filename: string; text_length: number; preview: string }>(
-      "/profile/resume",
-      {
-        token,
-        method: "POST",
-        body: formData,
-      }
-    );
+    return request<ResumeUploadResponse>("/profile/resume", {
+      token,
+      method: "POST",
+      body: formData,
+    });
   },
 
-  // Jobs
-  searchJobs: (token: string, query: string, location?: string) =>
-    request<{ status: string; jobs_found: number }>("/search-jobs", {
+  // ── Jobs ────────────────────────────────────────────────────────────────
+
+  /**
+   * Runs the LangGraph search + tailoring pipeline on the backend.
+   * @param keywords - Role title or tech stack keywords
+   * @param location - Target location (defaults to "Remote")
+   */
+  searchJobs: (token: string, keywords: string, location = "Remote"): Promise<JobSearchResponse> =>
+    request<JobSearchResponse>("/search-jobs", {
       token,
       method: "POST",
-      body: JSON.stringify({ query, location }),
+      body: JSON.stringify({ keywords, location }),
     }),
 
-  getJobs: (token: string, page = 1, pageSize = 20) =>
-    request<{ jobs: any[]; total: number; page: number; page_size: number }>(
-      `/jobs?page=${page}&page_size=${pageSize}`,
-      { token }
-    ),
+  /**
+   * Paginated list of jobs stored in Supabase.
+   * @param page - 1-based page number
+   * @param limit - Items per page (max 100)
+   * @param query - Optional keyword filter on job title
+   */
+  getJobs: (token: string, page = 1, limit = 20, query?: string): Promise<JobListResponse> => {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    if (query) params.set("query", query);
+    return request<JobListResponse>(`/jobs?${params.toString()}`, { token });
+  },
 
-  // Applications
-  apply: (token: string, jobId: string) =>
-    request<{ message: string; application_id: string }>("/apply", {
+  // ── Applications ────────────────────────────────────────────────────────
+
+  /**
+   * Creates or updates an application row for the authenticated user.
+   */
+  applyToJob: (
+    token: string,
+    jobId: string,
+    opts?: { cover_letter?: string; tailored_resume?: string; status?: string }
+  ): Promise<ApplicationItem> =>
+    request<ApplicationItem>("/applications/apply", {
       token,
       method: "POST",
-      body: JSON.stringify({ job_id: jobId }),
+      body: JSON.stringify({ job_id: jobId, ...opts }),
     }),
 
-  getApplications: (token: string) =>
-    request<{ applications: any[] }>("/applications", { token }),
+  /**
+   * Returns all applications for the authenticated user (array, not wrapped).
+   */
+  getApplications: (token: string): Promise<ApplicationItem[]> =>
+    request<ApplicationItem[]>("/applications", { token }),
 
-  updateApplicationStatus: (token: string, id: string, status: string) =>
-    request<{ message: string; application_id: string; status: string }>(
-      `/applications/${id}/status`,
-      {
-        token,
-        method: "PATCH",
-        body: JSON.stringify({ status }),
-      }
-    ),
+  /**
+   * Updates the Kanban status of an application.
+   * Valid statuses: Found | Applied | Interview | Offer | Rejected
+   */
+  updateApplicationStatus: (
+    token: string,
+    id: string,
+    status: string
+  ): Promise<ApplicationItem> =>
+    request<ApplicationItem>(`/applications/${id}/status`, {
+      token,
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
 };

@@ -6,9 +6,10 @@
 
 -- ── Extensions ──────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS vector; -- Module 7: Sentence-BERT dense embeddings
 
 -- =============================================================================
--- EXISTING TABLES (Modules 1-4)
+-- EXISTING TABLES (Modules 1-4) + Vector Semantic Matching (Module 7)
 -- =============================================================================
 
 -- User Profiles Table
@@ -19,19 +20,21 @@ CREATE TABLE IF NOT EXISTS profiles (
     linkedin_url     TEXT,
     github_url       TEXT,
     base_resume_text TEXT,
+    embedding        vector(384), -- Sentence-BERT all-MiniLM-L6-v2 384-dim dense embedding
     created_at       TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- Jobs Table (deduplicated by url)
 CREATE TABLE IF NOT EXISTS jobs (
-    id             UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    title          TEXT NOT NULL,
-    company        TEXT NOT NULL,
-    url            TEXT UNIQUE NOT NULL,
-    description    TEXT,
+    id              UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    title           TEXT NOT NULL,
+    company         TEXT NOT NULL,
+    url             TEXT UNIQUE NOT NULL,
+    description     TEXT,
     required_skills TEXT,
-    source         TEXT,
-    created_at     TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
+    source          TEXT,
+    embedding       vector(384), -- Sentence-BERT all-MiniLM-L6-v2 384-dim dense embedding
+    created_at      TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- Applications Table
@@ -46,10 +49,12 @@ CREATE TABLE IF NOT EXISTS applications (
     applied_at           TIMESTAMPTZ,
     created_at           TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     -- Added in Module 7/8:
-    missing_fields       JSONB,
-    -- e.g. ["Docker", "Kubernetes"] — skills in JD not found in resume
     match_score          NUMERIC(5,2),
-    -- TF-IDF cosine similarity score 0.00-100.00
+    -- Sentence-BERT + pgvector cosine similarity score (0.00-100.00)
+    missing_skills       JSONB,
+    -- e.g. ["Docker", "Kubernetes"] — skill gaps identified via embedding similarity
+    missing_fields       JSONB,
+    -- form input fields missing for Module 8 Human-in-Loop modal
     review_status        TEXT DEFAULT 'pending'
     -- review_status: 'pending' | 'approved' | 'rejected'
 );
@@ -167,6 +172,24 @@ CREATE POLICY "Users manage own interview sessions"
 CREATE POLICY "Users manage own notifications"
     ON notifications FOR ALL
     USING (auth.uid() = user_id);
+
+-- =============================================================================
+-- VECTOR INDEXING & MIGRATION (Module 7: pgvector)
+-- =============================================================================
+
+-- Enable pgvector
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- HNSW Vector Index on jobs for cosine distance nearest neighbor search
+CREATE INDEX IF NOT EXISTS idx_jobs_embedding 
+    ON jobs USING hnsw (embedding vector_cosine_ops);
+
+-- Migration commands for existing deployments:
+-- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS embedding vector(384);
+-- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS embedding vector(384);
+-- ALTER TABLE applications ADD COLUMN IF NOT EXISTS match_score NUMERIC(5,2);
+-- ALTER TABLE applications ADD COLUMN IF NOT EXISTS missing_skills JSONB;
+-- CREATE INDEX IF NOT EXISTS idx_jobs_embedding ON jobs USING hnsw (embedding vector_cosine_ops);
 
 -- =============================================================================
 -- SUPABASE STORAGE BUCKETS (create in Dashboard → Storage)

@@ -49,11 +49,12 @@ graph TD
 - [x] **Zero Hydration Errors**: Full Next.js production build passing with 0 errors (`npm run build`).
 - [x] **Next.js Security Upgrade**: Upgraded Next.js from 16.4.0 to 16.4.3 with `experimental.agentUpgrade = "security"` resolving security advisory.
 
-### 🏃 Phase 4: Job Dashboard & Match Scoring (Module 7 — Up Next)
-- [ ] **TF-IDF Match Scorer**: Scikit-learn + NLTK cosine similarity calculation between candidate resumes and job postings.
-- [ ] **Missing Skills Detection**: LangGraph node identifying skill gaps between candidate profile and JD.
-- [ ] **Live Kanban Pipeline**: 5-column drag-and-drop board (Discovered, Applied, Interview, Offer, Rejected) powered by `@dnd-kit`.
-- [ ] **Job Search Filter UI**: Real-time keyword, location, and portal filtering.
+### 🏃 Phase 4: Job Dashboard & Semantic Match Scoring (Module 7 — Up Next)
+- [ ] **Vector Storage (pgvector)**: Enable pgvector extension, dense embeddings `vector(384)`, and HNSW cosine index in Supabase PostgreSQL.
+- [ ] **Semantic Match Scorer**: Sentence-BERT (`all-MiniLM-L6-v2`) dense vectorization and cosine similarity matching between candidate resumes and job postings.
+- [ ] **Missing Skills Detection**: LangGraph `detect_missing_skills` node identifying skill gaps between candidate profile and JD with semantic similarity thresholding.
+- [ ] **Live Kanban Pipeline**: 5-column drag-and-drop board (Discovered, Applied, Interview, Offer, Rejected) powered by `@dnd-kit` with optimistic updates.
+- [ ] **Job Search Filter UI**: Real-time keyword, location, and portal filtering with `sort=match_score`.
 
 ---
 

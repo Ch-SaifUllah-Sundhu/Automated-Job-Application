@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { User, Session, Provider } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -10,20 +10,27 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const supabase = createClient();
+
+  // Stable Supabase client — created once per component mount via ref.
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
 
   useEffect(() => {
+    let mounted = true;
+
     async function getInitialSession() {
       try {
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        setSession(session);
-        setUser(session?.user ?? null);
+        if (mounted) {
+          setSession(session);
+          setUser(session?.user ?? null);
+        }
       } catch (err) {
         console.error("Error retrieving session:", err);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     }
 
@@ -32,15 +39,19 @@ export function useAuth() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      if (mounted) {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
-  }, [supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // supabase is stable via ref — intentionally omitted
 
   const signIn = useCallback(
     async (email: string, password: string) => {
@@ -63,7 +74,7 @@ export function useAuth() {
           data: {
             full_name: fullName,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback`,
         },
       });
       if (error) throw error;
@@ -83,7 +94,7 @@ export function useAuth() {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: provider as Provider,
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback`,
         },
       });
       if (error) throw error;
@@ -95,7 +106,7 @@ export function useAuth() {
   const resetPassword = useCallback(
     async (email: string) => {
       const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+        redirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback?next=/reset-password`,
       });
       if (error) throw error;
       return data;

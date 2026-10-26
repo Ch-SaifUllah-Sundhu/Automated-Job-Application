@@ -25,9 +25,10 @@ python-multipart>=0.0.9        # Module 5: multipart form-data (resume upload)
 pdfminer.six>=20221105         # Module 5: PDF text extraction
 python-docx>=1.1.0             # Module 5: DOCX text extraction
 
-# ── NLP / Match Scoring ───────────────────────────────────────────────────────
-scikit-learn>=1.4.0            # Module 7: TF-IDF vectorizer + cosine similarity
-nltk>=3.8.0                    # Module 7: English stopwords
+# ── Semantic Matching / Vector Embeddings ──────────────────────────────────────
+sentence-transformers>=3.0.0   # Module 7: all-MiniLM-L6-v2 dense embeddings (384-dim)
+scikit-learn>=1.4.0            # Module 7: pairwise cosine similarity & metrics fallback
+nltk>=3.8.0                    # Module 7: English stopwords & text tokenization
 
 # ── Background Tasks ──────────────────────────────────────────────────────────
 celery>=5.3.0                  # Module 8: task queue
