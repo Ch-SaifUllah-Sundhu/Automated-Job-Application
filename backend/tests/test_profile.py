@@ -140,3 +140,52 @@ def test_upload_resume_endpoint():
         assert "Alice Developer" in data["base_resume_text"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_update_profile_retry_without_embedding_when_missing_column():
+    """Verify PUT /profile retries without 'embedding' if Supabase lacks the column."""
+    mock_user = {"id": "user-456", "email": "dev@example.com"}
+    mock_sb = MagicMock()
+
+    # First call with embedding fails, second call without embedding succeeds
+    mock_sb.table.return_value.upsert.return_value.execute.side_effect = [
+        Exception("column profiles.embedding does not exist"),
+        MagicMock(data=[{"id": "user-456", "full_name": "Jane Smith", "base_resume_text": "Skills: Python"}]),
+    ]
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        resp = client.put(
+            "/profile",
+            json={"full_name": "Jane Smith", "base_resume_text": "Skills: Python"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["full_name"] == "Jane Smith"
+        assert data["base_resume_text"] == "Skills: Python"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_update_profile_handles_string_vector():
+    """Verify PUT /profile correctly parses pgvector's string output '[0.123, -0.456]'."""
+    mock_user = {"id": "user-456", "email": "dev@example.com"}
+    mock_sb = MagicMock()
+    mock_sb.table.return_value.upsert.return_value.execute.return_value.data = [
+        {"id": "user-456", "full_name": "Jane Smith", "embedding": "[0.123, -0.456]"}
+    ]
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        resp = client.put(
+            "/profile",
+            json={"full_name": "Jane Smith"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["embedding"] == [0.123, -0.456]
+    finally:
+        app.dependency_overrides.clear()
+

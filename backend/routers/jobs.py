@@ -124,6 +124,22 @@ async def search_jobs(
         ) from exc
 
 
+def _parse_embedding(val: Any) -> Optional[List[float]]:
+    if val is None:
+        return None
+    if isinstance(val, list):
+        return [float(x) for x in val]
+    if isinstance(val, str):
+        s = val.strip()
+        if s.startswith("[") and s.endswith("]"):
+            try:
+                import json
+                return [float(x) for x in json.loads(s)]
+            except Exception:
+                pass
+    return None
+
+
 @router.get(
     "/jobs",
     response_model=JobListResponse,
@@ -166,17 +182,29 @@ async def list_jobs(
             if prof_res and prof_res.data and len(prof_res.data) > 0:
                 user_profile = prof_res.data[0]
         except Exception as p_exc:
-            log.warning("Could not fetch profile for match scoring: %s", p_exc)
+            log.warning("Could not fetch profile with embedding (%s); querying base_resume_text only", p_exc)
+            try:
+                prof_res = (
+                    supabase.table("profiles")
+                    .select("base_resume_text")
+                    .eq("id", current_user["id"])
+                    .limit(1)
+                    .execute()
+                )
+                if prof_res and prof_res.data and len(prof_res.data) > 0:
+                    user_profile = prof_res.data[0]
+            except Exception:
+                pass
 
         resume_text = (user_profile or {}).get("base_resume_text") or ""
-        resume_emb = (user_profile or {}).get("embedding")
+        resume_emb = _parse_embedding((user_profile or {}).get("embedding"))
 
         items: List[JobItem] = []
         for j in jobs_data:
             match_res = None
             if resume_text or resume_emb:
                 job_desc = j.get("description") or j.get("title") or ""
-                job_emb = j.get("embedding")
+                job_emb = _parse_embedding(j.get("embedding"))
                 match_res = compute_match_score(
                     resume_text=resume_text,
                     job_description=job_desc,

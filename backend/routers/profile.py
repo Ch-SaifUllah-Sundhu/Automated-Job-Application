@@ -49,6 +49,22 @@ class ResumeUploadResponse(BaseModel):
     base_resume_text: str
 
 
+def _parse_embedding(val: Any) -> Optional[List[float]]:
+    if val is None:
+        return None
+    if isinstance(val, list):
+        return [float(x) for x in val]
+    if isinstance(val, str):
+        s = val.strip()
+        if s.startswith("[") and s.endswith("]"):
+            try:
+                import json
+                return [float(x) for x in json.loads(s)]
+            except Exception:
+                pass
+    return None
+
+
 @router.get("", response_model=ProfileResponse, summary="Get user profile")
 async def get_profile(
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -57,13 +73,24 @@ async def get_profile(
     """Retrieves the profile record for the authenticated user."""
     user_id = current_user["id"]
     try:
-        res = (
-            supabase.table("profiles")
-            .select("id, full_name, phone, linkedin_url, github_url, base_resume_text, embedding")
-            .eq("id", user_id)
-            .limit(1)
-            .execute()
-        )
+        try:
+            res = (
+                supabase.table("profiles")
+                .select("id, full_name, phone, linkedin_url, github_url, base_resume_text, embedding")
+                .eq("id", user_id)
+                .limit(1)
+                .execute()
+            )
+        except Exception as col_err:
+            log.warning("Query with embedding failed (%s), querying without embedding...", col_err)
+            res = (
+                supabase.table("profiles")
+                .select("id, full_name, phone, linkedin_url, github_url, base_resume_text")
+                .eq("id", user_id)
+                .limit(1)
+                .execute()
+            )
+
         if res and res.data and len(res.data) > 0:
             row = res.data[0]
             return ProfileResponse(
@@ -73,7 +100,7 @@ async def get_profile(
                 linkedin_url=row.get("linkedin_url"),
                 github_url=row.get("github_url"),
                 base_resume_text=row.get("base_resume_text"),
-                embedding=row.get("embedding"),
+                embedding=_parse_embedding(row.get("embedding")),
             )
         # Return empty profile if not yet created in table
         return ProfileResponse(id=user_id)
@@ -98,10 +125,23 @@ async def update_profile(
 
     # Module 7: Re-embed trigger on resume text update
     if update_data.get("base_resume_text"):
-        update_data["embedding"] = embed_text(update_data["base_resume_text"])
+        try:
+            update_data["embedding"] = embed_text(update_data["base_resume_text"])
+        except Exception as e:
+            log.warning("Embedding generation skipped: %s", e)
 
     try:
-        res = supabase.table("profiles").upsert(update_data, on_conflict="id").execute()
+        try:
+            res = supabase.table("profiles").upsert(update_data, on_conflict="id").execute()
+        except Exception as exc:
+            # If embedding column is not yet present in Supabase table, retry without it
+            if "embedding" in update_data:
+                log.warning("Upsert with embedding failed (%s); retrying without embedding...", exc)
+                update_data.pop("embedding", None)
+                res = supabase.table("profiles").upsert(update_data, on_conflict="id").execute()
+            else:
+                raise
+
         if not res or not res.data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -115,7 +155,7 @@ async def update_profile(
             linkedin_url=saved.get("linkedin_url"),
             github_url=saved.get("github_url"),
             base_resume_text=saved.get("base_resume_text"),
-            embedding=saved.get("embedding"),
+            embedding=_parse_embedding(saved.get("embedding")),
         )
     except HTTPException:
         raise
@@ -153,17 +193,29 @@ async def upload_resume(
             )
 
         # Module 7: Compute dense 384-d Sentence-BERT embedding
-        embedding = embed_text(extracted_text)
+        embedding = None
+        try:
+            embedding = embed_text(extracted_text)
+        except Exception as e:
+            log.warning("Failed to generate embedding for uploaded resume: %s", e)
 
-        # Upsert into user profile
-        supabase.table("profiles").upsert(
-            {
-                "id": user_id,
-                "base_resume_text": extracted_text,
-                "embedding": embedding,
-            },
-            on_conflict="id",
-        ).execute()
+        # Upsert into user profile (with fallback if embedding column is not in DB)
+        profile_row: Dict[str, Any] = {
+            "id": user_id,
+            "base_resume_text": extracted_text,
+        }
+        if embedding is not None:
+            profile_row["embedding"] = embedding
+
+        try:
+            supabase.table("profiles").upsert(profile_row, on_conflict="id").execute()
+        except Exception as exc:
+            if "embedding" in profile_row:
+                log.warning("Resume upsert with embedding failed (%s), retrying without embedding...", exc)
+                profile_row.pop("embedding", None)
+                supabase.table("profiles").upsert(profile_row, on_conflict="id").execute()
+            else:
+                raise
 
         preview = extracted_text[:300] + ("..." if len(extracted_text) > 300 else "")
         return ResumeUploadResponse(

@@ -393,7 +393,15 @@ def save_to_database(state: AgentState) -> Dict[str, Any]:
             "source": job.get("source", "DuckDuckGo"),
             "embedding": job_emb,
         }
-        job_result = supabase.table("jobs").upsert(row, on_conflict="url").execute()
+        try:
+            job_result = supabase.table("jobs").upsert(row, on_conflict="url").execute()
+        except Exception as j_exc:
+            if "embedding" in row:
+                log.warning("Job upsert with embedding failed (%s), retrying without embedding...", j_exc)
+                row.pop("embedding", None)
+                job_result = supabase.table("jobs").upsert(row, on_conflict="url").execute()
+            else:
+                raise
         log.info("Job saved: %s", job.get("title"))
 
         # B3 fix: Persist application row when user_id is present
@@ -416,7 +424,13 @@ def save_to_database(state: AgentState) -> Dict[str, Any]:
                     "match_score": state.get("match_score"),
                     "missing_skills": state.get("missing_skills", []),
                 }
-                supabase.table("applications").upsert(app_row, on_conflict="user_id,job_id").execute()
+                try:
+                    supabase.table("applications").upsert(app_row, on_conflict="user_id,job_id").execute()
+                except Exception as a_exc:
+                    log.warning("Application upsert with match/skills failed (%s), retrying without new columns...", a_exc)
+                    app_row.pop("match_score", None)
+                    app_row.pop("missing_skills", None)
+                    supabase.table("applications").upsert(app_row, on_conflict="user_id,job_id").execute()
                 log.info("Application row saved for user: %s (match_score=%s)", user_id, state.get("match_score"))
 
         return {"status": "Saved to DB"}
