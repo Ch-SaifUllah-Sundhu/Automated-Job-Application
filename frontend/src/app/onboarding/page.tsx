@@ -43,6 +43,47 @@ export default function OnboardingPage() {
   const [useManualText, setUseManualText] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Sync step with URL and listen to browser popstate (back/forward)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlStep = Number(params.get("step"));
+      if (urlStep >= 1 && urlStep <= 3) {
+        setStep(urlStep as 1 | 2 | 3);
+      }
+
+      const handlePopState = () => {
+        const currentParams = new URLSearchParams(window.location.search);
+        const currentStep = Number(currentParams.get("step")) || 1;
+        if (currentStep >= 1 && currentStep <= 3) {
+          setStep(currentStep as 1 | 2 | 3);
+        } else {
+          setStep(1);
+        }
+      };
+
+      window.addEventListener("popstate", handlePopState);
+      return () => window.removeEventListener("popstate", handlePopState);
+    }
+  }, []);
+
+  const advanceToStep = (newStep: 1 | 2 | 3) => {
+    setStep(newStep);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("step", String(newStep));
+      window.history.pushState({ step: newStep }, "", url.toString());
+    }
+  };
+
+  const handleBack = (targetStep: 1 | 2) => {
+    if (typeof window !== "undefined" && window.location.search.includes(`step=${step}`)) {
+      window.history.back();
+    } else {
+      setStep(targetStep);
+    }
+  };
+
   useEffect(() => {
     if (user?.user_metadata?.full_name) {
       setFullName(user.user_metadata.full_name);
@@ -66,7 +107,7 @@ export default function OnboardingPage() {
           if (location) localStorage.setItem("jobpilot_target_location", location);
         }
       }
-      setStep(2);
+      advanceToStep(2);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
@@ -102,11 +143,11 @@ export default function OnboardingPage() {
         await api.updateProfile(token, {
           base_resume_text: manualResumeText,
         });
-        setStep(3);
+        advanceToStep(3);
       } else if (resumeFile) {
         const result = await api.uploadResume(token, resumeFile);
         setResumePreview(result.preview);
-        setStep(3);
+        advanceToStep(3);
       } else {
         setError("Please attach a resume document or enter text manually.");
       }
@@ -383,7 +424,7 @@ export default function OnboardingPage() {
                 <div className="flex items-center gap-2.5 pt-3">
                   <button
                     type="button"
-                    onClick={() => setStep(1)}
+                    onClick={() => handleBack(1)}
                     className="h-9 px-3.5 rounded bg-[#0B0F19] hover:bg-[#172033] border border-[#1F2937] text-xs font-medium text-[#CBD5E1] flex items-center gap-1.5 cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />

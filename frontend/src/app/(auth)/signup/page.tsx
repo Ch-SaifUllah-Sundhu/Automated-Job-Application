@@ -52,7 +52,7 @@ export default function SignupPage() {
     useRef<HTMLInputElement>(null),
   ];
 
-  // Read URL parameters on mount
+  // Read URL parameters on mount and handle popstate navigation
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -65,8 +65,39 @@ export default function SignupPage() {
         setStep(2);
         setOtpNotice("Enter your 6-digit confirmation code below.");
       }
+
+      const handlePopState = () => {
+        const currentParams = new URLSearchParams(window.location.search);
+        const currentStep = currentParams.get("step");
+        if (currentStep === "2") {
+          setStep(2);
+        } else {
+          setStep(1);
+        }
+      };
+
+      window.addEventListener("popstate", handlePopState);
+      return () => window.removeEventListener("popstate", handlePopState);
     }
   }, []);
+
+  const advanceToStep = (newStep: 1 | 2) => {
+    setStep(newStep);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("step", String(newStep));
+      if (email) url.searchParams.set("email", email);
+      window.history.pushState({ step: newStep }, "", url.toString());
+    }
+  };
+
+  const handleBackToStep1 = () => {
+    if (typeof window !== "undefined" && window.location.search.includes("step=2")) {
+      window.history.back();
+    } else {
+      setStep(1);
+    }
+  };
 
   // Cooldown timer
   useEffect(() => {
@@ -95,8 +126,8 @@ export default function SignupPage() {
 
     try {
       await signUp(email, password, fullName);
-      // ALWAYS advance to Step 2 for 6-digit OTP verification
-      setStep(2);
+      // Advance to Step 2 with proper browser history entry
+      advanceToStep(2);
       setCooldown(60);
       setOtpNotice(`A 6-digit verification code has been dispatched to ${email}. Check your inbox or spam folder.`);
       setTimeout(() => {
@@ -106,7 +137,7 @@ export default function SignupPage() {
       if (err instanceof Error) {
         if (err.message.toLowerCase().includes("already registered")) {
           // Allow existing user to verify code directly
-          setStep(2);
+          advanceToStep(2);
           setCooldown(60);
           setOtpNotice(`An account already exists for ${email}. Enter the 6-digit confirmation code to verify, or sign in.`);
           setTimeout(() => {
@@ -496,9 +527,9 @@ export default function SignupPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setStep(1)}
-                    className="text-[#94A3B8] hover:text-white transition-colors p-1 rounded"
-                    title="Change details"
+                    onClick={handleBackToStep1}
+                    className="text-[#94A3B8] hover:text-white transition-colors p-1 rounded cursor-pointer"
+                    title="Back to details"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
                   </button>
