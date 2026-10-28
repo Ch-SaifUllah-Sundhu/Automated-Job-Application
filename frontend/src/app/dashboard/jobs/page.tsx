@@ -180,6 +180,29 @@ export default function JobsPage() {
     }
   };
 
+  // ── 1-Click Direct Crawl ──────────────────────────────────────────────────
+  const handleDirectCrawl = async (role: string, loc = "Remote") => {
+    const target = role.trim() || "Python Developer";
+    setAgentRunning(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Authentication required");
+
+      showToast(`Scraping LinkedIn, Indeed & Glassdoor for "${target}"...`);
+      const res: JobSearchResponse = await api.searchJobs(token, target, loc);
+      showToast(
+        `Crawled ${res.jobs_found} live roles for "${target}"! Added to database & pipeline.`
+      );
+      setPage(1);
+      await fetchJobs();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Live crawl failed";
+      showToast(msg, "error");
+    } finally {
+      setAgentRunning(false);
+    }
+  };
+
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
@@ -362,23 +385,40 @@ export default function JobsPage() {
           {/* Controls Bar */}
           <div className="p-4 rounded-xl bg-[#0E131F] border border-[#1F2937] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             {/* Search Input */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
+            <div className="relative flex-1 max-w-md flex items-center">
+              <Search className="w-4 h-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filter by title, keywords or technology…"
-                className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg pl-9 pr-3.5 py-2 text-xs text-white placeholder-[#64748B] transition-colors"
+                placeholder="Filter stored roles or type to live crawl…"
+                className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg pl-9 pr-24 py-2 text-xs text-white placeholder-[#64748B] transition-colors"
               />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-white"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                {searchQuery.trim().length >= 2 && (
+                  <button
+                    onClick={() => handleDirectCrawl(searchQuery.trim())}
+                    disabled={agentRunning}
+                    title={`Live scrape 10+ portals for "${searchQuery}"`}
+                    className="px-2 py-1 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-[10px] font-semibold text-white flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    {agentRunning ? (
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-2.5 h-2.5" />
+                    )}
+                    <span>Live Crawl</span>
+                  </button>
+                )}
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="text-[#64748B] hover:text-white p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Portal Filters & Sorting */}
@@ -468,20 +508,40 @@ export default function JobsPage() {
                     : "No jobs have been crawled yet. Use the AI search engine to discover opportunities."}
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setAgentRole(searchQuery.trim() || "Python Developer");
-                  setShowSearchModal(true);
-                }}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-md shadow-[#2563EB]/25 cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>
-                  {searchQuery.trim()
-                    ? `Crawl 10+ Portals for "${searchQuery}" with AI`
-                    : "Search ATS Opportunities Now"}
-                </span>
-              </button>
+              <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                <button
+                  disabled={agentRunning}
+                  onClick={() => handleDirectCrawl(searchQuery.trim() || "Python Developer")}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-md shadow-[#2563EB]/25 cursor-pointer disabled:opacity-60 transition-all"
+                >
+                  {agentRunning ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Crawling 10+ Portals for &ldquo;{searchQuery.trim() || "Python Developer"}&rdquo;…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      <span>
+                        {searchQuery.trim()
+                          ? `1-Click Crawl 10+ Portals for "${searchQuery.trim()}"`
+                          : "1-Click Crawl 15 Python Developer Roles"}
+                      </span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAgentRole(searchQuery.trim() || "Python Developer");
+                    setShowSearchModal(true);
+                  }}
+                  className="px-4 py-2.5 rounded-lg border border-[#1F2937] hover:bg-[#111827] text-xs font-medium text-[#94A3B8] hover:text-white transition-colors cursor-pointer"
+                >
+                  Custom Location Crawl…
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

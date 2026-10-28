@@ -132,14 +132,18 @@ CREATE POLICY "Users manage own profile"
     ON profiles FOR ALL
     USING (auth.uid() = id);
 
--- jobs: anyone authenticated can read; authenticated users can insert
-CREATE POLICY "Authenticated users read jobs"
+-- jobs: anyone can read public jobs; authenticated users can insert and update (for upsert)
+CREATE POLICY "Anyone can read jobs"
     ON jobs FOR SELECT
-    USING (auth.uid() IS NOT NULL);
+    USING (true);
 
 CREATE POLICY "Authenticated users insert jobs"
     ON jobs FOR INSERT
     WITH CHECK (auth.uid() IS NOT NULL);
+
+CREATE POLICY "Authenticated users update jobs"
+    ON jobs FOR UPDATE
+    USING (auth.uid() IS NOT NULL);
 
 -- applications: users can only access their own applications
 CREATE POLICY "Users manage own applications"

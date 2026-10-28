@@ -975,12 +975,15 @@ export default function DashboardPage() {
                         <div className="h-32 rounded-lg border border-dashed border-[#1F2937] flex flex-col items-center justify-center text-center p-3">
                           <span className="text-xs text-[#64748B]">No items in {col.label}</span>
                           {col.id === "Found" && (
-                            <button
-                              onClick={() => setShowSearchModal(true)}
-                              className="mt-2 text-[10px] text-[#2563EB] hover:underline"
-                            >
-                              + Search opportunities
-                            </button>
+                            <div className="mt-2 flex flex-col gap-1.5 items-center">
+                              <button
+                                onClick={() => setShowSearchModal(true)}
+                                className="px-2.5 py-1 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-[10px] font-semibold flex items-center gap-1 cursor-pointer shadow-sm"
+                              >
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>+ Crawl 10+ Portals</span>
+                              </button>
+                            </div>
                           )}
                         </div>
                       ) : (
@@ -1042,90 +1045,7 @@ export default function DashboardPage() {
         </main>
       </div>
 
-      {/* ── MODAL: Search Opportunities ──────────────────────────────────── */}
-      {showSearchModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-[#1F2937] rounded-lg max-w-md w-full p-6 shadow-xl animate-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-[#1F2937]">
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Search className="w-4 h-4 text-[#2563EB]" />
-                <span>Run AI Job Search</span>
-              </h3>
-              <button onClick={() => setShowSearchModal(false)} className="text-[#94A3B8] hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            <p className="text-xs text-[#94A3B8] mt-3 mb-4 leading-relaxed">
-              The Llama 3 agent will search 10+ portals via DuckDuckGo, select the best match, and generate a tailored cover letter and resume — saved directly to your pipeline.
-            </p>
-
-            {searchError && (
-              <div className="mb-3 p-2.5 rounded bg-red-950/30 border border-red-800/60 text-xs text-red-300 flex items-center gap-2">
-                <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                <span>{searchError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleTriggerSearch} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-medium text-[#CBD5E1] mb-1.5">
-                  Target Role / Tech Stack *
-                </label>
-                <input
-                  type="text"
-                  required
-                  autoFocus
-                  value={newSearchRole}
-                  onChange={(e) => setNewSearchRole(e.target.value)}
-                  placeholder="e.g. Senior React Engineer, Python Backend Developer…"
-                  className="w-full h-9 px-3 bg-[#0B0F19] border border-[#1F2937] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded text-xs text-white placeholder-[#64748B] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-[#CBD5E1] mb-1.5">
-                  Location
-                </label>
-                <input
-                  type="text"
-                  value={newSearchLocation}
-                  onChange={(e) => setNewSearchLocation(e.target.value)}
-                  placeholder="Remote, US, Pakistan, Global…"
-                  className="w-full h-9 px-3 bg-[#0B0F19] border border-[#1F2937] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded text-xs text-white placeholder-[#64748B] outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#1F2937]">
-                <button
-                  type="button"
-                  onClick={() => { setShowSearchModal(false); setSearchError(null); }}
-                  className="h-8 px-3.5 rounded bg-[#0B0F19] hover:bg-[#1F2937] border border-[#1F2937] text-xs font-medium text-[#CBD5E1] transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={searchingRemote}
-                  className="h-8 px-4 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
-                >
-                  {searchingRemote ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Searching Portals…</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Run AI Search</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ── MODAL: Application Detail ─────────────────────────────────────── */}
       {selectedApp && (
