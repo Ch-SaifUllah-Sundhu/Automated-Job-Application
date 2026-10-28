@@ -27,7 +27,7 @@ def get_supabase_client(
     """Returns an initialized Supabase client scoped with user credentials for RLS if present."""
     settings = get_settings()
     client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
-    if credentials and credentials.credentials:
+    if isinstance(credentials, HTTPAuthorizationCredentials) and credentials.credentials:
         try:
             client.postgrest.auth(credentials.credentials)
         except Exception as e:

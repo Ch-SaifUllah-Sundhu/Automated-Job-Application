@@ -11,12 +11,13 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from supabase import Client
 
 from agent import AgentState, agent_app
-from dependencies import get_current_user, get_supabase_client
+from dependencies import get_current_user, get_supabase_client, security
 from services.match_service import compute_match_score
 
 log = logging.getLogger("routers.jobs")
@@ -70,6 +71,7 @@ async def search_jobs(
     req: JobSearchRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
     supabase: Client = Depends(get_supabase_client),
+    credentials: HTTPAuthorizationCredentials | None = Security(security),
 ) -> JobSearchResponse:
     """
     Executes the LangGraph search and document generation pipeline.
@@ -93,6 +95,7 @@ async def search_jobs(
             log.warning("Could not fetch user profile resume: %s", exc)
             resume_text = ""
 
+    token_str = credentials.credentials if credentials else None
     initial_state: AgentState = {
         "keywords": req.keywords,
         "location": req.location,
@@ -104,6 +107,8 @@ async def search_jobs(
         "status": "",
         "error": None,
         "user_id": current_user["id"],
+        "user_token": token_str,
+        "supabase_client": supabase,
     }
 
     try:
@@ -160,7 +165,10 @@ async def list_jobs(
         req_query = supabase.table("jobs").select("*", count="exact")
 
         if query:
-            req_query = req_query.ilike("title", f"%{query}%")
+            clean_q = query.strip()
+            req_query = req_query.or_(
+                f"title.ilike.%{clean_q}%,company.ilike.%{clean_q}%,description.ilike.%{clean_q}%"
+            )
         if portal:
             req_query = req_query.ilike("source", f"%{portal}%")
 

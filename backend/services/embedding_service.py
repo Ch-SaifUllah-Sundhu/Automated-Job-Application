@@ -45,7 +45,10 @@ def get_embedding_model() -> Any:
         from sentence_transformers import SentenceTransformer
 
         log.info("Loading Sentence-BERT model '%s' (dim=%d)...", EMBEDDING_MODEL_NAME, EMBEDDING_DIM)
-        _model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+        try:
+            _model = SentenceTransformer(EMBEDDING_MODEL_NAME, local_files_only=True)
+        except Exception:
+            _model = SentenceTransformer(EMBEDDING_MODEL_NAME)
         log.info("Sentence-BERT model loaded successfully.")
         return _model
     except Exception as exc:  # noqa: BLE001

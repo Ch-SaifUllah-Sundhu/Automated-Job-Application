@@ -262,7 +262,7 @@ export default function JobsPage() {
             </Link>
 
             <Link
-              href="/onboarding"
+              href="/dashboard/profile"
               className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors"
             >
               <FileText className="w-4 h-4 text-[#94A3B8]" />
@@ -469,11 +469,18 @@ export default function JobsPage() {
                 </p>
               </div>
               <button
-                onClick={() => setShowSearchModal(true)}
+                onClick={() => {
+                  setAgentRole(searchQuery.trim() || "Python Developer");
+                  setShowSearchModal(true);
+                }}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-md shadow-[#2563EB]/25 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Search ATS Opportunities Now</span>
+                <span>
+                  {searchQuery.trim()
+                    ? `Crawl 10+ Portals for "${searchQuery}" with AI`
+                    : "Search ATS Opportunities Now"}
+                </span>
               </button>
             </div>
           ) : (

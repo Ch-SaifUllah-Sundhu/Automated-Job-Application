@@ -90,6 +90,8 @@ class AgentState(TypedDict, total=False):
     status: str                             # Human-readable pipeline status
     error: Optional[str]                    # Last error message, or None
     user_id: Optional[str]                  # Authenticated user ID (Bug B3 fix)
+    user_token: Optional[str]               # Authenticated Supabase JWT token
+    supabase_client: Optional[Any]          # Authenticated Supabase client instance
 
 
 # ---------------------------------------------------------------------------
@@ -111,10 +113,10 @@ _JOB_PORTALS: List[Dict[str, str]] = [
     {"name": "Workable",     "site": "apply.workable.com"},
 ]
 
-_MAX_PER_PORTAL = 3    # results fetched per portal query
+_MAX_PER_PORTAL = 5    # results fetched per portal query
 _MAX_TOTAL      = 15   # cap on total jobs returned
-_MAX_RETRIES    = 3    # DDG retries per query
-_RETRY_DELAY    = 2    # seconds (doubles each retry)
+_MAX_RETRIES    = 2    # DDG retries per query
+_RETRY_DELAY    = 1    # seconds
 
 
 def search_jobs(state: AgentState) -> Dict[str, Any]:
@@ -125,7 +127,7 @@ def search_jobs(state: AgentState) -> Dict[str, Any]:
     1. Run a site-specific query per portal (e.g. site:linkedin.com/jobs).
     2. Deduplicate results by URL across all portals.
     3. If total results < 3, run a fallback open query (no site filter).
-    4. Each DDG call retries up to 3× with exponential back-off.
+    4. Each DDG call retries up to 2× with exponential back-off on network errors.
 
     Returns up to ``_MAX_TOTAL`` unique jobs.
     """
@@ -160,9 +162,13 @@ def search_jobs(state: AgentState) -> Dict[str, Any]:
                 job = _parse_ddg_result(r, source=portal["name"])
                 all_jobs.append(job)
                 new += 1
+                if len(all_jobs) >= _MAX_TOTAL:
+                    break
 
         log.info("  %-20s → %d new result(s)", portal["name"], new)
-        time.sleep(0.8)   # be polite between portal queries
+        if len(all_jobs) >= _MAX_TOTAL:
+            break
+        time.sleep(0.2)   # be polite between portal queries
 
     # ── Pass 2: open fallback if portals returned too little ─────────────
     if len(all_jobs) < 3:
@@ -184,7 +190,11 @@ def search_jobs(state: AgentState) -> Dict[str, Any]:
                 if url and url not in seen_urls:
                     seen_urls.add(url)
                     all_jobs.append(_parse_ddg_result(r, source="Web"))
-            time.sleep(0.8)
+                    if len(all_jobs) >= _MAX_TOTAL:
+                        break
+            if len(all_jobs) >= _MAX_TOTAL:
+                break
+            time.sleep(0.2)
 
     total = len(all_jobs)
     log.info("Search complete. Total unique jobs: %d", total)
@@ -209,12 +219,12 @@ def _ddg_search(query: str, max_results: int) -> List[Dict[str, Any]] | str:
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
             raw = list(DDGS().text(query, max_results=max_results))
-            return raw or []
+            return raw
         except Exception as exc:  # noqa: BLE001
             log.warning("DDG attempt %d/%d failed for query '%s': %s",
                         attempt, _MAX_RETRIES, query[:60], exc)
             if attempt < _MAX_RETRIES:
-                time.sleep(_RETRY_DELAY ** attempt)
+                time.sleep(_RETRY_DELAY * attempt)
             else:
                 return str(exc)
     return []
@@ -283,6 +293,7 @@ def detect_missing_skills(state: AgentState) -> Dict[str, Any]:
 _MODEL = "qwen/qwen3.8-27b"  # High-performance chat model on Groq
 _MAX_INPUT_CHARS = 2000  # Context guard
 _TEMP = 0.7
+_MAX_TOKENS = 500  # Stays safely under Groq on-demand OTPM limit of 1000
 
 
 def draft_documents(state: AgentState) -> Dict[str, Any]:
@@ -293,7 +304,7 @@ def draft_documents(state: AgentState) -> Dict[str, Any]:
     - GROQ_API_KEY is missing
     - No jobs were found by the previous node
     """
-    log.info("[Node 2] Drafting with Groq (%s)...", _MODEL)
+    log.info("[Node 3] Drafting with Groq (%s)...", _MODEL)
 
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
@@ -308,7 +319,7 @@ def draft_documents(state: AgentState) -> Dict[str, Any]:
     resume = state.get("user_resume", "Experienced professional.")[:_MAX_INPUT_CHARS]
 
     try:
-        llm = ChatGroq(model=_MODEL, api_key=api_key, temperature=_TEMP)
+        llm = ChatGroq(model=_MODEL, api_key=api_key, temperature=_TEMP, max_tokens=_MAX_TOKENS)
         cover_letter = llm.invoke(_cover_letter_prompt(job_title, job_desc, resume)).content
         tailored_bullets = llm.invoke(_resume_prompt(job_desc, resume)).content
 
@@ -365,24 +376,33 @@ _SKIP_SAVE_STATUSES = {"Failed", "Search Failed", "No Jobs Found", "Drafting Fai
 
 def save_to_database(state: AgentState) -> Dict[str, Any]:
     """
-    Persist ALL found jobs into Supabase ``jobs`` table via upsert on ``url``.
-    Then persist the application row (with cover letter) when user_id is present.
+    Persist discovered jobs into Supabase ``jobs`` table via upsert on ``url``.
+    Then persist application rows (with cover letter and match analytics)
+    when user_id is present.
 
     Skips silently when:
     - Supabase client is not configured
     - Search itself failed (no jobs to save)
-    - The selected job has no URL (cannot deduplicate without it)
-
-    NOTE: Draft failures do NOT skip DB save — discovered jobs are always saved
-    so they appear in the jobs list even when Groq document generation fails.
-
-    NOTE (B3): Only the job row is saved here. The applications row
-    (with user_id + cover_letter) will be saved by the FastAPI layer in Module 5
-    once an authenticated user context is available.
+    - None of the jobs have a valid URL
     """
-    log.info("[Node 3] Saving to Supabase...")
+    log.info("[Node 4] Saving to Supabase...")
 
-    if not supabase:
+    # Resolve database client: prefer authenticated client passed from FastAPI route,
+    # or token-scoped client, or fall back to module client.
+    db = state.get("supabase_client")
+    if not db:
+        user_token = state.get("user_token")
+        if user_token and _SUPABASE_URL and _SUPABASE_KEY:
+            try:
+                db = _create_client(_SUPABASE_URL, _SUPABASE_KEY)
+                db.postgrest.auth(user_token)
+            except Exception as e:
+                log.warning("Could not attach user token to Supabase client: %s", e)
+                db = supabase
+        else:
+            db = supabase
+
+    if not db:
         log.warning("Supabase not configured — skipping DB save.")
         return {"status": "DB Skipped (No Connection)"}
 
@@ -391,66 +411,84 @@ def save_to_database(state: AgentState) -> Dict[str, Any]:
         log.warning("Search failed ('%s') — skipping DB save.", state.get("status"))
         return {"status": state.get("status", "Failed")}
 
-    job = state.get("selected_job") or {}
-    url = job.get("url", "")
-    if not url:
-        log.warning("Job has no URL — cannot upsert.")
+    # Collect jobs to save: prefer all found jobs, fallback to selected_job
+    jobs_to_save: List[Dict[str, Any]] = state.get("found_jobs") or []
+    if not jobs_to_save and state.get("selected_job"):
+        jobs_to_save = [state["selected_job"]]
+
+    if not jobs_to_save:
+        log.warning("No jobs found to save.")
+        return {"status": "DB Skipped (No Jobs)"}
+
+    valid_jobs = [j for j in jobs_to_save if j.get("url")]
+    if not valid_jobs:
+        log.warning("No jobs have a valid URL — cannot upsert.")
         return {"status": "DB Skipped (No URL)"}
+
+    user_id = state.get("user_id")
+    selected_job = state.get("selected_job") or valid_jobs[0]
+    selected_url = selected_job.get("url", "")
 
     try:
         from services.embedding_service import embed_text
 
-        # Module 7: Generate dense 384-d vector embedding for job
-        job_emb = embed_text(f"{job.get('title', '')} {job.get('description', '')}")
+        saved_count = 0
+        for job in valid_jobs:
+            url = job.get("url", "")
+            # Module 7: Generate dense 384-d vector embedding for job
+            job_emb = embed_text(f"{job.get('title', '')} {job.get('description', '')}")
 
-        row = {
-            "title": job.get("title", "Unknown"),
-            "company": job.get("company", "Unknown"),
-            "url": url,
-            "description": job.get("description", ""),
-            "source": job.get("source", "DuckDuckGo"),
-            "embedding": job_emb,
-        }
-        try:
-            job_result = supabase.table("jobs").upsert(row, on_conflict="url").execute()
-        except Exception as j_exc:
-            if "embedding" in row:
-                log.warning("Job upsert with embedding failed (%s), retrying without embedding...", j_exc)
-                row.pop("embedding", None)
-                job_result = supabase.table("jobs").upsert(row, on_conflict="url").execute()
-            else:
-                raise
-        log.info("Job saved: %s", job.get("title"))
+            row = {
+                "title": job.get("title", "Unknown"),
+                "company": job.get("company", "Unknown"),
+                "url": url,
+                "description": job.get("description", ""),
+                "source": job.get("source", "DuckDuckGo"),
+                "embedding": job_emb,
+            }
 
-        # B3 fix: Persist application row when user_id is present
-        user_id = state.get("user_id")
-        if user_id:
-            job_id = None
-            if job_result and getattr(job_result, "data", None) and len(job_result.data) > 0:
-                job_id = job_result.data[0].get("id")
-            if not job_id:
-                existing = supabase.table("jobs").select("id").eq("url", url).limit(1).execute()
-                if existing and getattr(existing, "data", None) and len(existing.data) > 0:
-                    job_id = existing.data[0].get("id")
-            if job_id:
-                app_row = {
-                    "user_id": user_id,
-                    "job_id": job_id,
-                    "status": "Found",
-                    "tailored_resume": state.get("tailored_resume", ""),
-                    "cover_letter": state.get("cover_letter", ""),
-                    "match_score": state.get("match_score"),
-                    "missing_skills": state.get("missing_skills", []),
-                }
-                try:
-                    supabase.table("applications").upsert(app_row, on_conflict="user_id,job_id").execute()
-                except Exception as a_exc:
-                    log.warning("Application upsert with match/skills failed (%s), retrying without new columns...", a_exc)
-                    app_row.pop("match_score", None)
-                    app_row.pop("missing_skills", None)
-                    supabase.table("applications").upsert(app_row, on_conflict="user_id,job_id").execute()
-                log.info("Application row saved for user: %s (match_score=%s)", user_id, state.get("match_score"))
+            try:
+                job_result = db.table("jobs").upsert(row, on_conflict="url").execute()
+            except Exception as j_exc:
+                if "embedding" in row:
+                    log.warning("Job upsert with embedding failed (%s), retrying without embedding...", j_exc)
+                    row.pop("embedding", None)
+                    job_result = db.table("jobs").upsert(row, on_conflict="url").execute()
+                else:
+                    raise
 
+            saved_count += 1
+
+            # B3 fix: Persist application row when user_id is present
+            if user_id:
+                job_id = None
+                if job_result and getattr(job_result, "data", None) and len(job_result.data) > 0:
+                    job_id = job_result.data[0].get("id")
+                if not job_id:
+                    existing = db.table("jobs").select("id").eq("url", url).limit(1).execute()
+                    if existing and getattr(existing, "data", None) and len(existing.data) > 0:
+                        job_id = existing.data[0].get("id")
+
+                if job_id:
+                    is_top_match = (url == selected_url)
+                    app_row = {
+                        "user_id": user_id,
+                        "job_id": job_id,
+                        "status": "Found",
+                        "tailored_resume": state.get("tailored_resume", "") if is_top_match else "",
+                        "cover_letter": state.get("cover_letter", "") if is_top_match else "",
+                        "match_score": state.get("match_score") if is_top_match else None,
+                        "missing_skills": state.get("missing_skills", []) if is_top_match else [],
+                    }
+                    try:
+                        db.table("applications").upsert(app_row, on_conflict="user_id,job_id").execute()
+                    except Exception as a_exc:
+                        log.warning("Application upsert with match/skills failed (%s), retrying without new columns...", a_exc)
+                        app_row.pop("match_score", None)
+                        app_row.pop("missing_skills", None)
+                        db.table("applications").upsert(app_row, on_conflict="user_id,job_id").execute()
+
+        log.info("Successfully persisted %d job(s) and application(s) to Supabase.", saved_count)
         return {"status": "Saved to DB"}
     except Exception as exc:  # noqa: BLE001
         log.error("DB save failed: %s", exc)

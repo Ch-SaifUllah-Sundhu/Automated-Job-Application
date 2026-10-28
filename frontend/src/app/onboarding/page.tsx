@@ -27,6 +27,7 @@ export default function OnboardingPage() {
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [submitting, setSubmitting] = useState(false);
+  const [launchingAgent, setLaunchingAgent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Step 1: Profile form state
@@ -159,6 +160,25 @@ export default function OnboardingPage() {
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleLaunchDashboard = async () => {
+    setLaunchingAgent(true);
+    try {
+      const token = await getAccessToken();
+      if (token) {
+        // Automatically crawl 10 portals for candidate's target role to populate dashboard
+        await api.searchJobs(
+          token,
+          targetTitle.trim() || "Python Developer",
+          location.trim() || "Remote"
+        );
+      }
+    } catch (crawlErr) {
+      console.warn("Initial background crawl notice:", crawlErr);
+    } finally {
+      router.push("/dashboard");
     }
   };
 
@@ -493,11 +513,21 @@ export default function OnboardingPage() {
                 <div className="pt-2">
                   <button
                     type="button"
-                    onClick={() => router.push("/dashboard")}
-                    className="w-full h-9 rounded bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold tracking-wide flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    disabled={launchingAgent}
+                    onClick={handleLaunchDashboard}
+                    className="w-full h-9 rounded bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold tracking-wide flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-75"
                   >
-                    <span>Launch Talent Dashboard</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    {launchingAgent ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Crawling 10+ Portals for &ldquo;{targetTitle || "Python Developer"}&rdquo;…</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Launch Talent Dashboard</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

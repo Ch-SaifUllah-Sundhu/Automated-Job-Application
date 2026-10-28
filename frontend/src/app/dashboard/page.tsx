@@ -599,6 +599,37 @@ export default function DashboardPage() {
     }
   };
 
+  /** Trigger AI Agent search pipeline across 10 portals */
+  const handleTriggerAgentSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSearchRole.trim()) return;
+    setSearchingRemote(true);
+    setSearchError(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Authentication required");
+
+      const res = await api.searchJobs(
+        token,
+        newSearchRole.trim(),
+        newSearchLocation.trim() || "Remote"
+      );
+
+      setShowSearchModal(false);
+      setNewSearchRole("");
+      showToast(
+        `AI crawler scraped DuckDuckGo across 10 portals & added ${res.jobs_found} opportunities to Discovered!`
+      );
+      await fetchData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Search agent failed";
+      setSearchError(msg);
+      showToast(msg, "error");
+    } finally {
+      setSearchingRemote(false);
+    }
+  };
+
   // ── Derived data ───────────────────────────────────────────────────────
   const filteredApps = applications.filter((app) => {
     if (!searchQuery) return true;
@@ -691,7 +722,7 @@ export default function DashboardPage() {
             </Link>
 
             <Link
-              href="/onboarding"
+              href="/dashboard/profile"
               className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors"
             >
               <FileText className="w-4 h-4 text-[#94A3B8]" />
@@ -877,16 +908,16 @@ export default function DashboardPage() {
             </div>
 
             <button
-              onClick={() => setShowUpgradeModal(true)}
-              className="p-4 rounded-lg bg-[#111827] hover:bg-[#161F33] border border-[#1F2937] hover:border-amber-400/40 transition-colors flex items-center justify-between text-left cursor-pointer group"
+              onClick={() => setShowSearchModal(true)}
+              className="p-4 rounded-lg bg-[#111827] hover:bg-[#161F33] border border-[#1F2937] hover:border-[#2563EB]/40 transition-colors flex items-center justify-between text-left cursor-pointer group"
             >
               <div>
                 <span className="text-xs font-medium text-[#94A3B8] group-hover:text-white transition-colors">Daily Searches</span>
-                <div className="text-xl font-bold text-white mt-1">3 / 3 Used</div>
-                <span className="text-[10px] text-amber-300 font-medium block mt-0.5">Unlock Unlimited Pro →</span>
+                <div className="text-xl font-bold text-white mt-1">Autonomous AI</div>
+                <span className="text-[10px] text-emerald-400 font-medium block mt-0.5">Click to crawl 10+ portals →</span>
               </div>
-              <div className="w-9 h-9 rounded bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-400">
-                <Zap className="w-4 h-4" />
+              <div className="w-9 h-9 rounded bg-[#2563EB]/15 border border-[#2563EB]/30 flex items-center justify-center text-[#2563EB]">
+                <Sparkles className="w-4 h-4" />
               </div>
             </button>
           </div>
@@ -1355,6 +1386,97 @@ export default function DashboardPage() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: Search Opportunities ───────────────────────────────────── */}
+      {showSearchModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0E131F] border border-[#1F2937] rounded-xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded bg-[#2563EB]/15 border border-[#2563EB]/40 flex items-center justify-center text-[#60A5FA]">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-semibold text-white">
+                  Crawl ATS Job Portals
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowSearchModal(false)}
+                className="text-[#64748B] hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[#94A3B8] leading-relaxed">
+              LangGraph agent will query 10+ portals (LinkedIn, Indeed, Greenhouse, Lever, etc.)
+              via DuckDuckGo, embed every role with Sentence-BERT, and populate your pipeline.
+            </p>
+
+            <form onSubmit={handleTriggerAgentSearch} className="space-y-4">
+              <div>
+                <label className="text-[11px] font-medium text-[#94A3B8] block mb-1">
+                  Target Role / Keywords *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newSearchRole}
+                  onChange={(e) => setNewSearchRole(e.target.value)}
+                  placeholder="e.g. Python Developer, Full Stack Engineer"
+                  className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3 py-2 text-xs text-white placeholder-[#64748B]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#94A3B8] block mb-1">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  value={newSearchLocation}
+                  onChange={(e) => setNewSearchLocation(e.target.value)}
+                  placeholder="e.g. Remote, San Francisco, New York"
+                  className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3 py-2 text-xs text-white placeholder-[#64748B]"
+                />
+              </div>
+
+              {searchError && (
+                <p className="text-xs text-rose-400 bg-rose-950/40 p-2.5 rounded border border-rose-800">
+                  {searchError}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSearchModal(false)}
+                  className="px-3.5 py-2 rounded-lg border border-[#1F2937] text-xs font-medium text-[#94A3B8] hover:text-white cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={searchingRemote || !newSearchRole.trim()}
+                  className="px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white shadow-md shadow-[#2563EB]/25 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {searchingRemote ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Crawling Portals…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Launch Pipeline</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

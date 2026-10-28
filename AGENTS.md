@@ -277,6 +277,7 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
 | B3 | Application row not saved (no user_id) | `agent.py:save_to_database` | 🔴 High | ✅ Fixed — user_id in AgentState |
 | B4 | Resume/JD truncated at 500 chars | `agent.py:draft_documents` | 🟡 Low | Acceptable for MVP |
 | B5 | Supabase RLS policies not written | `schema.sql` | 🔴 High | ✅ Full SQL written in schema.sql |
+| B6 | Agent DB save blocked by RLS 42501 (missing user JWT) & only 1 job saved | `agent.py:save_to_database` / `routers/jobs.py` | 🔴 High | ✅ Fixed — user JWT forwarded to agent, all 15 discovered jobs saved |
 
 ---
 
