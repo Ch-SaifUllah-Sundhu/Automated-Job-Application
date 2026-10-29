@@ -16,10 +16,15 @@ Automate job discovery, resume/cover letter tailoring, and application submissio
 | **AI Tailoring** — Llama 3 (Groq API) cover letters + resume bullets | ✅ Done | 4 |
 | **Job Persistence** — Save found jobs to Supabase | ✅ Done | 4 |
 | **REST API** — FastAPI endpoints for frontend integration | ✅ Done | 5 |
-| **Auth** — Supabase Auth, Google/GitHub SSO, OTP & Password Reset | ✅ Done | 6 |
-| **Semantic Scoring** — Sentence-BERT (`all-MiniLM-L6-v2`) + pgvector match % | 🏃 Next | 7 |
-| **Kanban Dashboard** — Dynamic 5-stage drag-and-drop tracking (@dnd-kit) | 🏃 Next | 7 |
-| **Automation** — Playwright scripts to submit applications | ⬜ Planned | 8-9 |
+| **Auth** — Supabase Auth, Google/GitHub SSO, OTP, Password Reset, Delete Account | ✅ Done | 6, Audit |
+| **Semantic Scoring** — Sentence-BERT (`all-MiniLM-L6-v2`) + pgvector match % | ✅ Done | 7 |
+| **Kanban Dashboard** — Dynamic 5-stage drag-and-drop tracking (@dnd-kit) | ✅ Done | 7 |
+| **Human-in-Loop Review** — Side-by-side editing, draft validation, quick-fix | ✅ Done | 8 |
+| **Manual Submission Workflow** — Honest candidate confirmation with reference ID | ✅ Done | Audit |
+| **Automation Engine** — Playwright headless submission | 🏃 Next | 9 |
+| **Stripe Billing** — Free vs Pro tiers and rate limits | ⬜ Planned | 10 |
+| **Interview Prep** — AI mock interview flashcards | ⬜ Planned | 11 |
+| **Chrome Extension** — Manifest V3 1-click autofill | ⬜ Planned | 12 |
 
 ### 4. Non-Functional Requirements
 - **Security**: `.env` excluded from git. API routes protected by Supabase JWT (Module 6).

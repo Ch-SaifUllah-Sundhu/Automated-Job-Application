@@ -5,7 +5,7 @@
 > all known bugs, every task (done and pending), precise file-by-file code maps,
 > and coding standards.
 >
-> Last updated: 2026-10-26 | Current module: **8 (Done) → 9 (Next)**
+> Last updated: 2026-10-29 | Current module: **Audit & Portal Upgrade (Done) → Module 9 (Next)**
 > Research basis: Competitive analysis of Simplify, Teal, Jobscan, LazyApply.
 
 ---
@@ -252,15 +252,18 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
 | GET | `/` | 4 | No | Health check |
 | GET | `/auth/me` | 5 | Yes | Current user profile |
 | POST | `/auth/logout` | 5 | Yes | Revoke session |
+| DELETE | `/auth/account` | Audit | Yes | Cascade account deletion & auth purge |
 | POST | `/search-jobs` | 5 | Yes | Run LangGraph pipeline |
-| GET | `/jobs` | 5 | Yes | Paginated job list |
-| POST | `/apply` | 5 | Yes | Create application + trigger draft |
+| GET | `/jobs` | 5 | Yes | Paginated job list with SBERT match score |
+| POST | `/apply` | 5 | Yes | Create application + trigger draft (saves to pipeline) |
 | GET | `/applications` | 5 | Yes | List user's applications |
-| PATCH | `/applications/{id}/approve` | 8 | Yes | Approve → queue Celery task |
+| PATCH | `/applications/{id}/approve` | 8 | Yes | Approve draft → queue Celery task |
+| PATCH | `/applications/{id}/review` | 8 | Yes | Update draft cover letter / resume |
+| POST | `/applications/{id}/manual-complete` | Audit | Yes | Record candidate manual portal submission |
 | PATCH | `/applications/{id}/status` | 7 | Yes | Update Kanban column |
-| GET | `/profile` | 5 | Yes | Get user profile |
-| PUT | `/profile` | 5 | Yes | Update profile fields |
-| POST | `/profile/resume` | 5 | Yes | Upload + parse resume file |
+| GET | `/profile` | 5 | Yes | Get user profile & career preferences |
+| PUT | `/profile` | 5 | Yes | Update profile & career preferences + re-embed |
+| POST | `/profile/resume` | 5 | Yes | Upload + parse resume file + SBERT embedding |
 | POST | `/billing/checkout` | 10 | Yes | Get Stripe checkout URL |
 | POST | `/billing/portal` | 10 | Yes | Get Stripe portal URL |
 | POST | `/billing/webhook` | 10 | No* | Stripe webhook (sig verify) |
@@ -278,6 +281,10 @@ The interrupt uses LangGraph's built-in checkpointing. Pipeline pauses after
 | B4 | Resume/JD truncated at 500 chars | `agent.py:draft_documents` | 🟡 Low | Acceptable for MVP |
 | B5 | Supabase RLS policies not written | `schema.sql` | 🔴 High | ✅ Full SQL written in schema.sql |
 | B6 | Agent DB save blocked by RLS 42501 (missing user JWT) & only 1 job saved | `agent.py:save_to_database` / `routers/jobs.py` | 🔴 High | ✅ Fixed — user JWT forwarded to agent, all 15 discovered jobs saved |
+| B7 | Schema column mismatch (`_text`) & missing `UNIQUE(user_id, job_id)` | `schema.sql` / `migrations/` | 🔴 High | ✅ Fixed — canonical columns + migration backfill + constraint |
+| B8 | Fake `Applied` status on discovery/save without external submission | `routers/applications.py` | 🔴 High | ✅ Fixed — segregated into `Found` + `discovered` |
+| B9 | Direct approve bypass in `/review` & fake worker submit claims | `routers/applications.py` / `automation_task.py` | 🔴 High | ✅ Fixed — review cannot approve, worker routes manual_required honestly |
+| B10 | Fragmented desktop sidebars & missing mobile navigation drawer | `frontend/src/components/layout/` | 🟡 Medium | ✅ Fixed — unified `AuthenticatedAppLayout` with mobile drawer |
 
 ---
 

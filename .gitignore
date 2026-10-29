@@ -6,17 +6,24 @@ __pycache__/
 venv/
 .venv/
 *.egg-info/
+.pytest_cache/
+*.log
 
 # ── Secrets (NEVER commit) ───────────────────────────────────
 .env
 .env.local
 .env.*.local
+frontend/.env.local
+frontend/.env.*.local
 *.pem
 
 # ── Next.js / Node ───────────────────────────────────────────
 node_modules/
+frontend/node_modules/
 .next/
+frontend/.next/
 out/
+frontend/out/
 
 # ── OS ───────────────────────────────────────────────────────
 .DS_Store

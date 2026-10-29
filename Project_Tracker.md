@@ -2,8 +2,8 @@
 
 > **Project:** Job Application Assistant (SaaS)  
 > **Source of Truth:** [AGENTS.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/AGENTS.md) & [Architecture.md](file:///D:/Personal%20Projects/Automated%20Job%20Application/Architecture.md)  
-> **Last Updated:** 2026-10-24  
-> **Current Focus:** Module 9 (Playwright Automation Engine) 🏃
+> **Last Updated:** 2026-10-29  
+> **Current Focus:** Audit & Account-Portal Upgrade [✅ Completed] → Module 9 (Playwright Automation Engine) 🏃
 
 ---
 
@@ -107,6 +107,17 @@
 - [x] **Automation Audit Trail**: Live sync timeline displaying events from `automation_logs` on the review page.
 - [x] **Kanban Integration**: Wire "Review & Submit" CTA directly into Kanban card and detail modal on `/dashboard`.
 - [x] **Verification**: All 55 backend unit/integration tests passing; `npm run build` succeeds with 0 errors.
+
+### Master Audit: Account-Portal & State-Machine Upgrade [✅ Completed]
+- [x] **Database Schema Reconciled (`001_reconcile_schema.sql`)**: Canonical `cover_letter` and `tailored_resume` backfilled from legacy `_text` columns; deduplication query executed and `UNIQUE(user_id, job_id)` constraint applied; `workflow_status`, `mode`, `submission_mode`, `submission_reference`, `missing_fields` (JSONB), and `location` columns added with composite indexes.
+- [x] **Truthful State Separation**: `POST /applications/apply` records discovery (`Found` / `discovered`) without false claims of external submission (`applied_at=None`).
+- [x] **Review & Approval Segregation**: `PATCH /applications/{id}/review` strictly updates drafts and rejects direct approval attempts (HTTP 400). `PATCH /applications/{id}/approve` validates draft existence, transitions to `queued`, and dispatches background task.
+- [x] **Worker Honesty**: Removed fake `submitted` logs and false `Applied` status. Unsupported or candidate-direct portals transition to `workflow_status="manual_required"`.
+- [x] **Server-Side Account Purge**: Implemented `DELETE /auth/account` executing cascade cleanup of applications, logs, interviews, notifications, subscriptions, profile, and Supabase Auth user record.
+- [x] **Unified Layout Architecture**: Created `AuthenticatedAppLayout` with shared sidebar, responsive mobile navigation drawer, real-time unread notifications counter, and account purge modal.
+- [x] **Candidate Preferences Persistence**: DB persistence and Sentence-BERT vector re-indexing for `target_role`, `target_location`, `experience_level`, and `job_type`.
+- [x] **Manual Submission Fallback**: Added `POST /applications/{id}/manual-complete` endpoint and confirmation modal with optional confirmation reference ID.
+- [x] **Full Suite Verification**: 60/60 backend tests passing (`pytest`); 14/14 frontend routes compiled and prerendered cleanly (`npm run build`).
 
 ### Module 9: Playwright Automation Engine [⬜ Planned]
 - [ ] Install Playwright and Chromium dependencies (`playwright`, `playwright-stealth`).
