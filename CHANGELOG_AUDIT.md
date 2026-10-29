@@ -136,3 +136,4 @@ All identified deficiencies have been addressed, reconciled, and verified end-to
 - **`.gitignore`:** Explicitly excludes `.env`, `.env.local`, `frontend/.env.local`, `__pycache__`, `.pytest_cache`, and build artifacts.
 - **No Orphaned Layouts:** All sub-pages in `/dashboard` share `AuthenticatedAppLayout` without duplicate desktop sidebars.
 - **Contract Synchronization:** TypeScript interfaces in `frontend/src/lib/api.ts` match Pydantic schemas in `backend/routers/` exactly.
+
