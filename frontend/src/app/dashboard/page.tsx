@@ -569,17 +569,15 @@ export default function DashboardPage() {
     setTimeout(() => setCopied(false), 2500);
   };
 
-  /** Save edited cover letter back to the application record */
+  /** Save edited cover letter back to the application record via review endpoint */
   const handleSaveCoverLetter = async () => {
     if (!selectedApp) return;
     setSavingCoverLetter(true);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Session expired");
-      // We update via the applyToJob upsert so cover_letter is persisted
-      await api.applyToJob(token, selectedApp.job_id, {
+      await api.updateReview(token, selectedApp.id, {
         cover_letter: coverLetterDraft,
-        status: selectedApp.status,
       });
       setApplications((prev) =>
         prev.map((a) =>
@@ -590,7 +588,7 @@ export default function DashboardPage() {
         prev ? { ...prev, cover_letter: coverLetterDraft } : null
       );
       setEditingCoverLetter(false);
-      showToast("Cover letter saved successfully.");
+      showToast("Draft cover letter updated successfully!");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Save failed";
       showToast(msg, "error");
@@ -662,12 +660,11 @@ export default function DashboardPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen w-full bg-[#0B0F19] text-[#E2E8F0] flex font-sans selection:bg-[#2563EB]/30 selection:text-white">
-
+    <div className="w-full text-[#E2E8F0] p-6 lg:p-8 font-sans selection:bg-[#2563EB]/30 selection:text-white max-w-7xl mx-auto space-y-6">
       {/* Toast */}
       {toastMessage && (
         <div
-          className={`fixed top-5 right-5 z-50 p-3 rounded border text-white text-xs shadow-xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 ${
+          className={`fixed top-5 right-5 z-50 p-3.5 rounded-lg border text-white text-xs shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 ${
             toastType === "error"
               ? "bg-[#1a0808] border-red-700"
               : "bg-[#111827] border-[#2563EB]"
@@ -685,180 +682,50 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Left Sidebar ──────────────────────────────────────────────────── */}
-      <aside className="w-60 border-r border-[#1F2937] bg-[#0B0F19] flex flex-col justify-between shrink-0 hidden md:flex">
+      {/* ── Pipeline Toolbar ────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#1F2937]">
         <div>
-          {/* Brand */}
-          <div className="p-4 border-b border-[#1F2937] flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-xs tracking-wider">
-                JP
-              </div>
-              <div>
-                <span className="text-sm font-semibold tracking-tight text-white block leading-none">
-                  JobPilot
-                </span>
-                <span className="text-[10px] text-[#94A3B8]">Talent Operations</span>
-              </div>
-            </Link>
-          </div>
-
-          {/* Nav */}
-          <nav className="p-3 space-y-1">
-            <Link
-              href="/dashboard"
-              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-semibold bg-[#161F33] text-white border-l-2 border-[#2563EB] cursor-pointer"
-            >
-              <FolderKanban className="w-4 h-4 text-[#2563EB]" />
-              <span>Job Pipeline</span>
-            </Link>
-
-            <Link
-              href="/dashboard/jobs"
-              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors"
-            >
-              <Compass className="w-4 h-4 text-[#94A3B8]" />
-              <span>Jobs &amp; Match Scoring</span>
-            </Link>
-
-            <Link
-              href="/dashboard/profile"
-              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors"
-            >
-              <FileText className="w-4 h-4 text-[#94A3B8]" />
-              <span>Resume &amp; Profile</span>
-            </Link>
-
-            <button
-              onClick={() => setShowUpgradeModal(true)}
-              className="w-full flex items-center justify-between px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors cursor-pointer"
-            >
-              <span className="flex items-center gap-2.5">
-                <Zap className="w-4 h-4 text-amber-400" />
-                <span>Pro Membership</span>
-              </span>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-400/10 text-amber-300 border border-amber-400/20">
-                PRO
-              </span>
-            </button>
-          </nav>
+          <h1 className="text-xl font-bold text-white flex items-center gap-2.5">
+            <FolderKanban className="w-5 h-5 text-[#38BDF8]" />
+            <span>Job Application Pipeline</span>
+          </h1>
+          <p className="text-xs text-[#94A3B8] mt-1">
+            Track applications from initial discovery through human approval, submission, and interviews.
+          </p>
         </div>
 
-        {/* Sidebar Footer */}
-        <div className="p-3 border-t border-[#1F2937] bg-[#0B0F19]">
-          <div className="p-2.5 rounded bg-[#111827] border border-[#1F2937] mb-2.5">
-            <div className="text-[10px] uppercase font-bold text-[#64748B] tracking-wider mb-0.5">
-              Platform Architect
-            </div>
-            <p className="text-xs font-medium text-white">Chaudhry Saif Ullah Sundhu</p>
-            <p className="text-[10px] text-[#94A3B8]">Founder &amp; Lead Engineer</p>
+        <div className="flex items-center gap-3">
+          <div className="relative max-w-xs w-full">
+            <Search className="w-3.5 h-3.5 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Filter pipeline roles…"
+              className="w-full h-9 pl-8 pr-3 bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] rounded-lg text-xs text-white placeholder-[#64748B] outline-none transition-colors"
+            />
           </div>
 
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2 truncate">
-              <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-[11px]">
-                {user?.email ? user.email.slice(0, 2).toUpperCase() : "JP"}
-              </div>
-              <div className="truncate">
-                <p className="text-[11px] font-medium text-white truncate">
-                  {user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User"}
-                </p>
-                <p className="text-[10px] text-[#64748B] truncate">{user?.email || ""}</p>
-              </div>
-            </div>
+          <button
+            onClick={() => fetchData()}
+            disabled={loadingData}
+            title="Refresh pipeline data"
+            className="p-2 rounded-lg bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] text-[#94A3B8] hover:text-white transition-colors cursor-pointer"
+          >
+            <RefreshCw className={`w-4 h-4 ${loadingData ? "animate-spin text-[#2563EB]" : ""}`} />
+          </button>
 
-            <button
-              onClick={handleLogout}
-              disabled={loggingOut}
-              title="Sign Out"
-              className="p-1.5 rounded hover:bg-[#1F2937] text-[#94A3B8] hover:text-red-400 transition-colors cursor-pointer"
-            >
-              {loggingOut ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
-              ) : (
-                <LogOut className="w-3.5 h-3.5" />
-              )}
-            </button>
-          </div>
+          <Link
+            href="/dashboard/jobs"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-md shadow-[#2563EB]/25 transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Find Jobs</span>
+          </Link>
         </div>
-      </aside>
+      </div>
 
-      {/* ── Main Workspace ────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-
-        {/* Top Header */}
-        <header className="h-14 border-b border-[#1F2937] bg-[#0B0F19]/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30">
-          <div className="flex items-center gap-3 flex-1 max-w-md">
-            <div className="relative w-full">
-              <Search className="w-3.5 h-3.5 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Filter pipeline by role or company…"
-                className="w-full h-8 pl-8 pr-3 bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB] rounded text-xs text-white placeholder-[#64748B] outline-none transition-colors"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => fetchData()}
-              disabled={loadingData}
-              title="Refresh pipeline"
-              className="w-8 h-8 rounded bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] flex items-center justify-center text-[#94A3B8] hover:text-white transition-colors cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loadingData ? "animate-spin" : ""}`} />
-            </button>
-
-            <button
-              onClick={() => setShowSearchModal(true)}
-              className="h-8 px-3 rounded bg-[#2563EB] hover:bg-[#1D4ED8] active:bg-[#1E40AF] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Search Opportunities</span>
-            </button>
-
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="w-8 h-8 rounded bg-[#111827] hover:bg-[#1F2937] border border-[#1F2937] flex items-center justify-center text-[#94A3B8] hover:text-white transition-colors cursor-pointer relative"
-              >
-                <Bell className="w-3.5 h-3.5" />
-                <span className="w-2 h-2 rounded-full bg-emerald-500 absolute top-1.5 right-1.5 ring-2 ring-[#111827]" />
-              </button>
-
-              {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 rounded-lg bg-[#111827] border border-[#1F2937] p-3 shadow-xl z-50">
-                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#1F2937]">
-                    <span className="text-xs font-semibold text-white">System Events</span>
-                    <button
-                      onClick={() => setShowNotifications(false)}
-                      className="text-[10px] text-[#2563EB] hover:underline"
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                  <div className="space-y-2 text-xs">
-                    {notificationsList.map((n) => (
-                      <div key={n.id} className="p-2.5 rounded bg-[#0B0F19] border border-[#1F2937]">
-                        <div className="flex items-center justify-between">
-                          <p className="text-white font-medium text-xs">{n.title}</p>
-                          <span className="text-[10px] text-[#64748B]">{n.time}</span>
-                        </div>
-                        <p className="text-[11px] text-[#94A3B8] mt-0.5">{n.desc}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
-
-        {/* Content */}
-        <main className="p-6 space-y-6">
+      <div className="space-y-6">
 
           {/* KPI Tiles */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -1042,10 +909,7 @@ export default function DashboardPage() {
               <span>Delete Account</span>
             </button>
           </div>
-        </main>
-      </div>
-
-
+        </div>
 
       {/* ── MODAL: Application Detail ─────────────────────────────────────── */}
       {selectedApp && (
@@ -1186,18 +1050,13 @@ export default function DashboardPage() {
                 >
                   Close
                 </button>
-                <button
-                  type="button"
-                  disabled={movingId === selectedApp.id}
-                  onClick={async () => {
-                    await moveAppStatus(selectedApp.id, "Applied");
-                    setSelectedApp(null);
-                  }}
-                  className="h-8 px-3.5 rounded bg-[#1E293B] hover:bg-[#334155] border border-[#334155] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
+                <Link
+                  href={`/dashboard/review/${selectedApp.id}`}
+                  className="h-8 px-4 rounded bg-[#2563EB] hover:bg-[#1D4ED8] text-xs font-semibold text-white flex items-center gap-1.5 transition-colors shadow-md shadow-[#2563EB]/25"
                 >
-                  <span>Mark Applied</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </button>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Review &amp; Submit</span>
+                </Link>
               </div>
             </div>
           </div>

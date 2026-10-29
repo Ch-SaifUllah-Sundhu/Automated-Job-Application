@@ -149,9 +149,16 @@ export function JobCard({ job, onApply, isApplying = false, applied = false }: J
             {job.title}
           </h3>
 
-          <div className="flex items-center gap-2 text-xs text-[#94A3B8]">
-            <Building2 className="w-3.5 h-3.5 text-[#64748B] shrink-0" />
-            <span className="font-medium text-[#CBD5E1] truncate">{job.company}</span>
+          <div className="flex items-center gap-2 text-xs text-[#94A3B8] flex-wrap">
+            <div className="flex items-center gap-1.5 font-medium text-[#CBD5E1] truncate">
+              <Building2 className="w-3.5 h-3.5 text-[#64748B] shrink-0" />
+              <span>{job.company}</span>
+            </div>
+            {job.location && (
+              <span className="text-[11px] text-[#94A3B8] bg-[#1E293B]/70 px-2 py-0.5 rounded border border-slate-700/50">
+                {job.location}
+              </span>
+            )}
           </div>
         </div>
 
@@ -234,9 +241,9 @@ export function JobCard({ job, onApply, isApplying = false, applied = false }: J
         </a>
 
         {applied ? (
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#38BDF8] bg-blue-500/10 border border-blue-500/20 px-3 py-1.5 rounded-lg">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            Applied
+            In Pipeline
           </span>
         ) : (
           <button
@@ -248,12 +255,12 @@ export function JobCard({ job, onApply, isApplying = false, applied = false }: J
             {isApplying ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Tailoring…</span>
+                <span>Preparing…</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Tailor & Apply</span>
+                <span>Prepare Application</span>
               </>
             )}
           </button>

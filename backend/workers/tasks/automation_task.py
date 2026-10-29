@@ -37,10 +37,18 @@ log = logging.getLogger("workers.automation")
 
 
 def _get_supabase():
-    """Lazy Supabase client factory (avoids import-time failures)."""
+    """
+    Supabase client factory for server-side background workers.
+    Prefers SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY to safely bypass RLS in trusted worker tasks.
+    Falls back to SUPABASE_KEY if service-role credential is not configured.
+    """
     from supabase import create_client
     url = os.environ.get("SUPABASE_URL", "")
-    key = os.environ.get("SUPABASE_KEY", "")
+    key = (
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_SERVICE_KEY")
+        or os.environ.get("SUPABASE_KEY", "")
+    )
     if not url or not key:
         raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set")
     return create_client(url, key)
@@ -111,6 +119,19 @@ def submit_application(self, application_id: str, user_id: str) -> Dict[str, Any
         job_title = job_data.get("title", "Unknown Role")
         company = job_data.get("company", "Unknown Company")
 
+        # Idempotency check: don't double-process already submitted applications
+        if app_data.get("status") == "Applied" or app_data.get("workflow_status") == "submitted":
+            log.info("[Task] Application %s already submitted — skipping duplicate run", application_id)
+            return {"status": "already_submitted", "detail": "Application was previously submitted."}
+
+        # Mark application as actively submitting
+        try:
+            supabase.table("applications").update({
+                "workflow_status": "submitting",
+            }).eq("id", application_id).execute()
+        except Exception:
+            pass
+
         log.info("[Task] Loaded application for '%s' at '%s'", job_title, company)
 
         # ── Step 2: Load user profile ─────────────────────────────────────
@@ -137,33 +158,32 @@ def submit_application(self, application_id: str, user_id: str) -> Dict[str, Any
             supabase.table("applications").update({
                 "missing_fields": missing_fields,
                 "review_status": "pending",
+                "workflow_status": "awaiting_review",
             }).eq("id", application_id).execute()
             log.warning("[Task] Missing fields: %s", missing_fields)
             return {"status": "missing_data", "detail": detail, "missing_fields": missing_fields}
 
-        # ── Step 4: Placeholder for Playwright automation (Module 9) ──────
-        # TODO (Module 9): Launch Playwright, navigate to job_url, fill form
-        log.info("[Task] Playwright automation ready (Module 9 implementation pending)")
+        # ── Step 4: Browser Automation State ─────────────────────────────
+        # Module 9 will implement the full browser adapter engine.
+        # Until headless submission is executed with verified confirmation, we NEVER emit a false "submitted" event.
+        log.info("[Task] Direct portal submission pending Module 9 adapter. Routing to manual_required workflow.")
         _log_automation_event(
-            supabase, application_id, "pending_automation",
-            f"Queued for browser automation: {job_url}. Full submission runs in Module 9."
+            supabase, application_id, "manual_required",
+            f"Automated portal submission for {company} is awaiting Module 9 browser integration. Application packet ready for manual submission."
         )
 
-        # ── Step 5: Mark application as approved / queued ─────────────────
+        # ── Step 5: Mark application as Manual Required ──────────────────
         supabase.table("applications").update({
             "review_status": "approved",
-            "status": "Applied",
+            "status": "Manual Required",
+            "workflow_status": "manual_required",
+            "failure_reason": "Automated portal adapter for this domain is scheduled for Module 9. Please complete submission manually via the portal link.",
         }).eq("id", application_id).execute()
 
-        _log_automation_event(
-            supabase, application_id, "submitted",
-            f"Application approved and queued for '{job_title}' at {company}."
-        )
-
-        log.info("[Task] submit_application complete: app_id=%s", application_id)
+        log.info("[Task] submit_application complete with manual_required: app_id=%s", application_id)
         return {
-            "status": "approved",
-            "detail": f"Application for '{job_title}' at {company} approved. Automation queued.",
+            "status": "manual_required",
+            "detail": f"Application prepared for '{job_title}' at {company}. Manual submission on portal required.",
         }
 
     except Exception as exc:

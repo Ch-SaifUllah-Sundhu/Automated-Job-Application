@@ -47,6 +47,7 @@ class JobItem(BaseModel):
     title: str
     company: str
     url: str
+    location: Optional[str] = None
     description: Optional[str] = None
     source: Optional[str] = None
     created_at: Optional[str] = None
@@ -154,6 +155,7 @@ async def list_jobs(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
     query: Optional[str] = Query(None, description="Optional keyword filter"),
+    location: Optional[str] = Query(None, description="Filter by location / remote"),
     portal: Optional[str] = Query(None, description="Filter by portal / source"),
     sort: Optional[str] = Query(None, description="Sort field: 'match_score' or 'created_at'"),
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -169,6 +171,8 @@ async def list_jobs(
             req_query = req_query.or_(
                 f"title.ilike.%{clean_q}%,company.ilike.%{clean_q}%,description.ilike.%{clean_q}%"
             )
+        if location:
+            req_query = req_query.ilike("location", f"%{location.strip()}%")
         if portal:
             req_query = req_query.ilike("source", f"%{portal}%")
 
@@ -227,6 +231,7 @@ async def list_jobs(
                     title=j.get("title", ""),
                     company=j.get("company", ""),
                     url=j.get("url", ""),
+                    location=j.get("location") or "Remote",
                     description=j.get("description"),
                     source=j.get("source"),
                     created_at=j.get("created_at"),

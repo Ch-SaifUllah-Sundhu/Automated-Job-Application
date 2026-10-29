@@ -30,6 +30,12 @@ class ProfileUpdateRequest(BaseModel):
     linkedin_url: Optional[str] = Field(None, max_length=255)
     github_url: Optional[str] = Field(None, max_length=255)
     base_resume_text: Optional[str] = Field(None, description="Raw plain text resume")
+    target_role: Optional[str] = Field(None, max_length=120)
+    target_location: Optional[str] = Field(None, max_length=120)
+    experience_level: Optional[str] = Field(None, max_length=50)
+    job_type: Optional[str] = Field(None, max_length=50)
+    preferences: Optional[Dict[str, Any]] = None
+    skills: Optional[List[str]] = None
 
 
 class ProfileResponse(BaseModel):
@@ -39,6 +45,12 @@ class ProfileResponse(BaseModel):
     linkedin_url: Optional[str] = None
     github_url: Optional[str] = None
     base_resume_text: Optional[str] = None
+    target_role: Optional[str] = None
+    target_location: Optional[str] = None
+    experience_level: Optional[str] = None
+    job_type: Optional[str] = None
+    preferences: Optional[Dict[str, Any]] = None
+    skills: Optional[List[str]] = None
     embedding: Optional[List[float]] = None
 
 
@@ -76,13 +88,13 @@ async def get_profile(
         try:
             res = (
                 supabase.table("profiles")
-                .select("id, full_name, phone, linkedin_url, github_url, base_resume_text, embedding")
+                .select("id, full_name, phone, linkedin_url, github_url, base_resume_text, target_role, target_location, experience_level, job_type, preferences, skills, embedding")
                 .eq("id", user_id)
                 .limit(1)
                 .execute()
             )
         except Exception as col_err:
-            log.warning("Query with embedding failed (%s), querying without embedding...", col_err)
+            log.warning("Full profile query failed (%s), querying core columns only...", col_err)
             res = (
                 supabase.table("profiles")
                 .select("id, full_name, phone, linkedin_url, github_url, base_resume_text")
@@ -100,6 +112,12 @@ async def get_profile(
                 linkedin_url=row.get("linkedin_url"),
                 github_url=row.get("github_url"),
                 base_resume_text=row.get("base_resume_text"),
+                target_role=row.get("target_role"),
+                target_location=row.get("target_location"),
+                experience_level=row.get("experience_level"),
+                job_type=row.get("job_type"),
+                preferences=row.get("preferences"),
+                skills=row.get("skills"),
                 embedding=_parse_embedding(row.get("embedding")),
             )
         # Return empty profile if not yet created in table
@@ -134,13 +152,14 @@ async def update_profile(
         try:
             res = supabase.table("profiles").upsert(update_data, on_conflict="id").execute()
         except Exception as exc:
-            # If embedding column is not yet present in Supabase table, retry without it
-            if "embedding" in update_data:
+            # If newer columns are not yet present in Supabase table, retry without them
+            retry_data = dict(update_data)
+            if "embedding" in retry_data:
                 log.warning("Upsert with embedding failed (%s); retrying without embedding...", exc)
-                update_data.pop("embedding", None)
-                res = supabase.table("profiles").upsert(update_data, on_conflict="id").execute()
-            else:
-                raise
+                retry_data.pop("embedding", None)
+            for new_col in ["target_role", "target_location", "experience_level", "job_type", "preferences", "skills"]:
+                retry_data.pop(new_col, None)
+            res = supabase.table("profiles").upsert(retry_data, on_conflict="id").execute()
 
         if not res or not res.data:
             raise HTTPException(
@@ -155,6 +174,12 @@ async def update_profile(
             linkedin_url=saved.get("linkedin_url"),
             github_url=saved.get("github_url"),
             base_resume_text=saved.get("base_resume_text"),
+            target_role=saved.get("target_role"),
+            target_location=saved.get("target_location"),
+            experience_level=saved.get("experience_level"),
+            job_type=saved.get("job_type"),
+            preferences=saved.get("preferences"),
+            skills=saved.get("skills"),
             embedding=_parse_embedding(saved.get("embedding")),
         )
     except HTTPException:

@@ -63,6 +63,11 @@ function ReviewApplicationContent() {
   const [copiedDoc, setCopiedDoc] = useState<string | null>(null);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
+  // Manual submission states
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualReference, setManualReference] = useState("");
+  const [isManualSubmitting, setIsManualSubmitting] = useState(false);
+
   // ── Load Application Details ──────────────────────────────────────────────
   const loadData = useCallback(async () => {
     if (!applicationId) return;
@@ -194,6 +199,31 @@ function ReviewApplicationContent() {
     }
   };
 
+  // ── Manual Submission Confirmation Action ─────────────────────────────────
+  const handleConfirmManualSubmission = async () => {
+    setIsManualSubmitting(true);
+    setError(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Authentication required");
+
+      const updated = await api.manualCompleteApplication(token, applicationId, {
+        submission_reference: manualReference.trim() || undefined,
+      });
+      setAppData(updated);
+      if (updated.logs) {
+        setLogs(updated.logs);
+      }
+      setShowManualModal(false);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3500);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to confirm manual submission");
+    } finally {
+      setIsManualSubmitting(false);
+    }
+  };
+
   // ── Quick-Fix Missing Fields ──────────────────────────────────────────────
   const handleSaveMissingFields = async () => {
     setSavingMissing(true);
@@ -274,25 +304,48 @@ function ReviewApplicationContent() {
 
           <div className="flex items-center gap-3">
             {/* Status Pills */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#1F2937] text-[#94A3B8] border border-[#374151]">
-                Status: <strong className="text-white">{appData?.status}</strong>
+                Pipeline: <strong className="text-white">{appData?.status}</strong>
               </span>
 
-              {isApproved && (
+              {(appData?.workflow_status === "manual_required" || appData?.status === "Manual Required") && (
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  Manual Portal Action Required
+                </span>
+              )}
+
+              {(appData?.workflow_status === "submitted" || appData?.status === "Applied") && (
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Applied {appData?.submission_mode === "manual_confirmed" ? "(Manual Confirmed)" : "(Automated)"}
+                </span>
+              )}
+
+              {appData?.workflow_status === "queued" && (
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center gap-1.5 animate-pulse">
+                  <Clock className="w-3.5 h-3.5" />
+                  Queued for Automation
+                </span>
+              )}
+
+              {isApproved && appData?.workflow_status !== "submitted" && appData?.workflow_status !== "queued" && (
                 <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   Approved
                 </span>
               )}
+
               {isRejected && (
                 <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1.5">
                   <XCircle className="w-3.5 h-3.5" />
                   Rejected
                 </span>
               )}
-              {!isApproved && !isRejected && (
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 animate-pulse">
+
+              {!isApproved && !isRejected && appData?.workflow_status !== "manual_required" && appData?.workflow_status !== "submitted" && appData?.workflow_status !== "queued" && (
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 flex items-center gap-1.5 animate-pulse">
                   <Clock className="w-3.5 h-3.5" />
                   Review Pending
                 </span>
@@ -300,7 +353,7 @@ function ReviewApplicationContent() {
             </div>
 
             {/* Quick Action Button in Header */}
-            {!isApproved && (
+            {!isApproved && appData?.workflow_status !== "submitted" && (
               <button
                 disabled={isApproving}
                 onClick={handleApprove}
@@ -320,6 +373,44 @@ function ReviewApplicationContent() {
 
       {/* ── Main Content Container ─────────────────────────────────────────── */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
+        {/* Manual Required Guidance Banner */}
+        {(appData?.workflow_status === "manual_required" || appData?.status === "Manual Required") && (
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-[#111827] border border-amber-500/40 shadow-xl space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Manual Candidate Submission Required</h3>
+                  <p className="text-xs text-[#CBD5E1] mt-0.5 max-w-2xl leading-relaxed">
+                    This job portal requires direct candidate submission (due to interactive form fields, file upload constraints, or employer authentication). Use your customized cover letter and tailored resume bullets below to submit directly on their portal, then click confirm to record your application honestly.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {appData?.url && (
+                  <a
+                    href={appData.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1F2937] hover:bg-[#374151] text-xs font-semibold text-white border border-[#374151] transition-colors"
+                  >
+                    <span>Open Portal</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+                <button
+                  onClick={() => setShowManualModal(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Mark as Submitted</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Error notification bar */}
         {error && (
           <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm flex items-center justify-between">
@@ -652,7 +743,17 @@ function ReviewApplicationContent() {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowManualModal(true)}
+                      className="px-3.5 py-2 rounded-xl bg-[#1F2937] hover:bg-[#374151] text-xs font-semibold text-emerald-400 border border-emerald-500/30 hover:border-emerald-500/60 transition-colors flex items-center gap-1.5 cursor-pointer"
+                      title="Record confirmed manual external submission"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Confirm Manual Submission</span>
+                    </button>
+
                     <button
                       disabled={isApproving}
                       onClick={handleApprove}
@@ -741,6 +842,67 @@ function ReviewApplicationContent() {
             </div>
           </div>
         </div>
+
+        {/* ── Manual Submission Confirmation Modal ──────────────────────────── */}
+        {showManualModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-[#111827] border border-[#1F2937] rounded-2xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  Confirm External Submission
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowManualModal(false)}
+                  className="text-[#94A3B8] hover:text-white transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-[#94A3B8] leading-relaxed">
+                Confirm that you have completed and submitted your application directly on the employer portal. This will advance the job to &quot;Applied&quot; with a verified manual completion audit trail.
+              </p>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[#CBD5E1]">
+                  Confirmation / Reference ID (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={manualReference}
+                  onChange={(e) => setManualReference(e.target.value)}
+                  placeholder="e.g., APP-98234 or Portal Submission URL"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0B0F19] border border-[#374151] text-xs text-white placeholder-[#64748B] focus:outline-none focus:border-[#2563EB]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowManualModal(false)}
+                  className="px-4 py-2 rounded-lg bg-[#1F2937] hover:bg-[#374151] text-xs font-semibold text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isManualSubmitting}
+                  onClick={handleConfirmManualSubmission}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white flex items-center gap-2 transition-colors disabled:opacity-50"
+                >
+                  {isManualSubmitting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  )}
+                  <span>Confirm Submission</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

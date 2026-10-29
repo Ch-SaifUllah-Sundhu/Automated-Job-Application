@@ -79,3 +79,25 @@ def test_logout():
         assert "Successfully logged out" in resp.json()["message"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_delete_account_unauthorized():
+    """DELETE /auth/account requires authentication."""
+    resp = client.delete("/auth/account")
+    assert resp.status_code == 401
+
+
+def test_delete_account_success():
+    """DELETE /auth/account cascades data cleanup and calls admin auth deletion."""
+    mock_user = {"id": "user-123", "email": "test@example.com"}
+    mock_sb = MagicMock()
+    mock_sb.table.return_value.delete.return_value.eq.return_value.execute.return_value = MagicMock()
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        resp = client.delete("/auth/account")
+        assert resp.status_code == 200
+        assert "deleted successfully" in resp.json()["message"]
+    finally:
+        app.dependency_overrides.clear()

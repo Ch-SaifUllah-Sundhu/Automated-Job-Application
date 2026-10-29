@@ -129,7 +129,7 @@ export default function JobsPage() {
     }
   }, [authLoading, fetchJobs]);
 
-  // ── Apply Action ──────────────────────────────────────────────────────────
+  // ── Save / Prepare Application Action ──────────────────────────────────────
   const handleApply = async (job: JobItem) => {
     setApplyingJobId(job.id);
     try {
@@ -137,13 +137,13 @@ export default function JobsPage() {
       if (!token) throw new Error("Authentication required");
 
       await api.applyToJob(token, job.id, {
-        status: "Applied",
+        status: "Found",
       });
 
       setAppliedJobIds((prev) => new Set(prev).add(job.id));
-      showToast(`Applied to ${job.company}! Added to your Kanban pipeline.`);
+      showToast(`Saved ${job.title} at ${job.company} to your pipeline! Review tailored draft before submitting.`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Application failed";
+      const msg = err instanceof Error ? err.message : "Saving application failed";
       showToast(msg, "error");
     } finally {
       setApplyingJobId(null);
@@ -223,7 +223,7 @@ export default function JobsPage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#0B0F19] text-[#E2E8F0] flex font-sans selection:bg-[#2563EB]/30 selection:text-white">
+    <div className="w-full text-[#E2E8F0] p-6 lg:p-8 font-sans selection:bg-[#2563EB]/30 selection:text-white max-w-7xl mx-auto">
       {/* Toast */}
       {toastMessage && (
         <div
@@ -248,140 +248,38 @@ export default function JobsPage() {
         </div>
       )}
 
-      {/* ── Left Sidebar ──────────────────────────────────────────────────── */}
-      <aside className="w-60 border-r border-[#1F2937] bg-[#0B0F19] flex flex-col justify-between shrink-0 hidden md:flex">
+      {/* ── Page Header ─────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#1F2937] mb-6">
         <div>
-          {/* Brand */}
-          <div className="p-4 border-b border-[#1F2937] flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-xs tracking-wider">
-                JP
-              </div>
-              <div>
-                <span className="text-sm font-semibold tracking-tight text-white block leading-none">
-                  JobPilot
-                </span>
-                <span className="text-[10px] text-[#94A3B8]">Talent Operations</span>
-              </div>
-            </Link>
-          </div>
-
-          {/* Navigation */}
-          <nav className="p-3 space-y-1">
-            <Link
-              href="/dashboard"
-              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors"
-            >
-              <FolderKanban className="w-4 h-4 text-[#94A3B8]" />
-              <span>Job Pipeline</span>
-            </Link>
-
-            <Link
-              href="/dashboard/jobs"
-              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-semibold bg-[#161F33] text-white border-l-2 border-[#2563EB]"
-            >
-              <Compass className="w-4 h-4 text-[#2563EB]" />
-              <span>Jobs &amp; Match Scoring</span>
-            </Link>
-
-            <Link
-              href="/dashboard/profile"
-              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors"
-            >
-              <FileText className="w-4 h-4 text-[#94A3B8]" />
-              <span>Resume &amp; Profile</span>
-            </Link>
-
-            <button
-              onClick={() => setShowUpgradeModal(true)}
-              className="w-full flex items-center justify-between px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors cursor-pointer"
-            >
-              <span className="flex items-center gap-2.5">
-                <Zap className="w-4 h-4 text-amber-400" />
-                <span>Pro Membership</span>
-              </span>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-400/10 text-amber-300 border border-amber-400/20">
-                PRO
-              </span>
-            </button>
-          </nav>
+          <h1 className="text-xl font-bold text-white flex items-center gap-2.5">
+            <Compass className="w-5 h-5 text-[#38BDF8]" />
+            <span>Find Jobs &amp; Semantic Match</span>
+          </h1>
+          <p className="text-xs text-[#94A3B8] mt-1">
+            Real-time Sentence-BERT <span className="font-mono text-emerald-400">all-MiniLM-L6-v2</span> dense vector scoring across verified job openings.
+          </p>
         </div>
 
-        {/* Sidebar Footer */}
-        <div className="p-3 border-t border-[#1F2937] bg-[#0B0F19]">
-          <div className="p-2.5 rounded bg-[#111827] border border-[#1F2937] mb-2.5">
-            <div className="text-[10px] uppercase font-bold text-[#64748B] tracking-wider mb-0.5">
-              Platform Architect
-            </div>
-            <p className="text-xs font-medium text-white">Chaudhry Saif Ullah Sundhu</p>
-            <p className="text-[10px] text-[#94A3B8]">Founder &amp; Lead Engineer</p>
-          </div>
-
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2 truncate">
-              <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-[11px]">
-                {user?.email ? user.email.slice(0, 2).toUpperCase() : "JP"}
-              </div>
-              <div className="truncate">
-                <p className="text-[11px] font-medium text-white truncate">
-                  {user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User"}
-                </p>
-                <p className="text-[10px] text-[#64748B] truncate">{user?.email || ""}</p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleLogout}
-              disabled={loggingOut}
-              title="Sign Out"
-              className="p-1.5 rounded hover:bg-[#1F2937] text-[#94A3B8] hover:text-red-400 transition-colors cursor-pointer"
-            >
-              {loggingOut ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
-              ) : (
-                <LogOut className="w-3.5 h-3.5" />
-              )}
-            </button>
-          </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowSearchModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-md shadow-[#2563EB]/25 transition-all cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Crawl Portals with AI</span>
+          </button>
+          <button
+            onClick={fetchJobs}
+            title="Refresh list"
+            className="p-2 rounded-lg bg-[#111827] border border-[#1F2937] text-[#94A3B8] hover:text-white hover:bg-[#1F2937] transition-colors cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-[#2563EB]" : ""}`} />
+          </button>
         </div>
-      </aside>
+      </div>
 
-      {/* ── Main Content Area ─────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        {/* Top Header */}
-        <header className="h-16 border-b border-[#1F2937] bg-[#0B0F19]/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#2563EB]/10 border border-[#2563EB]/30 flex items-center justify-center text-[#60A5FA]">
-              <Compass className="w-4 h-4" />
-            </div>
-            <div>
-              <h1 className="text-sm font-semibold text-white">Jobs &amp; Semantic Match Scoring</h1>
-              <p className="text-[11px] text-[#94A3B8]">
-                Real-time Sentence-BERT <span className="font-mono text-emerald-400">all-MiniLM-L6-v2</span> dense vector match
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowSearchModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-md shadow-[#2563EB]/25 transition-all cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>AI Opportunity Search</span>
-            </button>
-            <button
-              onClick={fetchJobs}
-              title="Refresh list"
-              className="p-2 rounded-lg bg-[#111827] border border-[#1F2937] text-[#94A3B8] hover:text-white hover:border-[#374151] transition-colors"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-            </button>
-          </div>
-        </header>
-
-        {/* Content Body */}
-        <div className="p-6 max-w-7xl w-full mx-auto space-y-6">
+      {/* Content Body */}
+      <div className="space-y-6">
           {/* Controls Bar */}
           <div className="p-4 rounded-xl bg-[#0E131F] border border-[#1F2937] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             {/* Search Input */}
@@ -582,7 +480,6 @@ export default function JobsPage() {
             </div>
           )}
         </div>
-      </main>
 
       {/* ── Search Opportunities Modal ────────────────────────────────────── */}
       {showSearchModal && (

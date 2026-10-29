@@ -232,7 +232,8 @@ def test_update_review_success():
             "id": "app-001",
             "job_id": "job-101",
             "status": "Found",
-            "review_status": "approved",
+            "review_status": "pending",
+            "workflow_status": "awaiting_approval",
             "cover_letter": "Edited human-approved letter",
             "tailored_resume": "• Edited bullet",
             "applied_at": None,
@@ -249,34 +250,91 @@ def test_update_review_success():
             "/applications/app-001/review",
             json={
                 "cover_letter": "Edited human-approved letter",
-                "review_status": "approved",
+                "review_status": "pending",
             },
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["cover_letter"] == "Edited human-approved letter"
-        assert data["review_status"] == "approved"
+        assert data["review_status"] == "pending"
     finally:
         app.dependency_overrides.clear()
 
 
-def test_approve_application_success():
-    """Module 8: approving triggers status update and Celery dispatch."""
+def test_update_review_prohibits_direct_approval():
+    """Module 8 / P0 audit: setting review_status='approved' on review endpoint is prohibited."""
+    mock_user = {"id": "user-456", "email": "dev@example.com"}
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        resp = client.patch(
+            "/applications/app-001/review",
+            json={"review_status": "approved"},
+        )
+        assert resp.status_code == 400
+        assert "Direct approval via review update endpoint is prohibited" in resp.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_manual_complete_application_success():
+    """Module 8 / P0 audit: candidate self-reports manual external submission."""
     mock_user = {"id": "user-456", "email": "dev@example.com"}
     mock_sb = MagicMock()
-    mock_sb.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
-        {"id": "app-001", "job_id": "job-101", "status": "Applied", "review_status": "approved"}
-    ]
-    mock_sb.table.return_value.insert.return_value.execute.return_value.data = [{"id": "log-002"}]
+    mock_sb.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [{"id": "app-001"}]
+    mock_sb.table.return_value.insert.return_value.execute.return_value.data = [{"id": "log-003"}]
     mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
         {
             "id": "app-001",
             "job_id": "job-101",
             "status": "Applied",
             "review_status": "approved",
+            "workflow_status": "submitted",
+            "submission_mode": "manual_confirmed",
+            "submission_reference": "REF-12345",
+            "cover_letter": "My Letter",
+            "tailored_resume": "My Resume",
+            "applied_at": "2026-10-11T12:00:00Z",
+            "created_at": "2026-10-11T12:00:00Z",
+            "jobs": {"title": "DevOps Engineer", "company": "SaaS Inc", "url": "https://example.com"},
+        }
+    ]
+    mock_sb.table.return_value.select.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = []
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        resp = client.post(
+            "/applications/app-001/manual-complete",
+            json={"submission_reference": "REF-12345"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "Applied"
+        assert data["workflow_status"] == "submitted"
+        assert data["submission_mode"] == "manual_confirmed"
+        assert data["submission_reference"] == "REF-12345"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_approve_application_success():
+    """Module 8: approving validates draft, sets review_status='approved', workflow_status='queued'."""
+    mock_user = {"id": "user-456", "email": "dev@example.com"}
+    mock_sb = MagicMock()
+    mock_sb.table.return_value.update.return_value.eq.return_value.eq.return_value.execute.return_value.data = [
+        {"id": "app-001", "job_id": "job-101", "status": "Found", "review_status": "approved", "workflow_status": "queued"}
+    ]
+    mock_sb.table.return_value.insert.return_value.execute.return_value.data = [{"id": "log-002"}]
+    mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {
+            "id": "app-001",
+            "job_id": "job-101",
+            "status": "Found",
+            "review_status": "approved",
+            "workflow_status": "queued",
             "cover_letter": "Approved letter",
             "tailored_resume": "• Approved bullet",
-            "applied_at": "2026-10-11T12:00:00Z",
+            "applied_at": None,
             "created_at": "2026-10-11T12:00:00Z",
             "jobs": {"title": "DevOps Engineer", "company": "SaaS Inc", "url": "https://example.com"},
         }
@@ -289,7 +347,33 @@ def test_approve_application_success():
         resp = client.patch("/applications/app-001/approve")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "Applied"
         assert data["review_status"] == "approved"
+        assert data["workflow_status"] == "queued"
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_approve_application_rejects_empty_draft():
+    """Module 8 / P0 audit: approving an application with no tailored documents returns 400."""
+    mock_user = {"id": "user-456", "email": "dev@example.com"}
+    mock_sb = MagicMock()
+    mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {
+            "id": "app-001",
+            "job_id": "job-101",
+            "status": "Found",
+            "review_status": "pending",
+            "cover_letter": None,
+            "tailored_resume": "",
+            "jobs": {"title": "DevOps", "company": "SaaS", "url": "https://example.com"},
+        }
+    ]
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        resp = client.patch("/applications/app-001/approve")
+        assert resp.status_code == 400
+        assert "Cannot approve an empty application" in resp.json()["detail"]
     finally:
         app.dependency_overrides.clear()

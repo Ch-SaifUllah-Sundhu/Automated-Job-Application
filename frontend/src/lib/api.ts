@@ -51,11 +51,18 @@ async function request<T>(endpoint: string, options: ApiOptions = {}): Promise<T
 
 export interface ProfileData {
   id: string;
+  email?: string | null;
   full_name?: string | null;
   phone?: string | null;
   linkedin_url?: string | null;
   github_url?: string | null;
   base_resume_text?: string | null;
+  target_role?: string | null;
+  target_location?: string | null;
+  experience_level?: string | null;
+  job_type?: string | null;
+  preferences?: Record<string, unknown> | null;
+  skills?: string[] | null;
 }
 
 export interface JobItem {
@@ -63,6 +70,7 @@ export interface JobItem {
   title: string;
   company: string;
   url: string;
+  location?: string | null;
   description?: string | null;
   source?: string | null;
   created_at?: string | null;
@@ -86,9 +94,16 @@ export interface ApplicationItem {
   url?: string | null;
   status: string;
   review_status?: string | null;
+  workflow_status?: string | null;
+  draft_version?: number | null;
+  mode?: string | null;
+  submission_mode?: string | null;
+  submission_reference?: string | null;
+  failure_reason?: string | null;
   cover_letter?: string | null;
   tailored_resume?: string | null;
   applied_at?: string | null;
+  last_submitted_at?: string | null;
   created_at?: string | null;
   match_score?: number | null;
   missing_skills?: string[] | null;
@@ -144,6 +159,12 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  deleteAccount: (token: string): Promise<{ message: string }> =>
+    request<{ message: string }>("/auth/account", {
+      token,
+      method: "DELETE",
+    }),
+
   uploadResume: (token: string, file: File): Promise<ResumeUploadResponse> => {
     const formData = new FormData();
     formData.append("file", file);
@@ -182,7 +203,8 @@ export const api = {
     limit = 20,
     query?: string,
     portal?: string,
-    sort?: string
+    sort?: string,
+    location?: string
   ): Promise<JobListResponse> => {
     const params = new URLSearchParams({
       page: String(page),
@@ -191,10 +213,37 @@ export const api = {
     if (query) params.set("query", query);
     if (portal && portal !== "all") params.set("portal", portal);
     if (sort) params.set("sort", sort);
+    if (location && location !== "all") params.set("location", location);
     return request<JobListResponse>(`/jobs?${params.toString()}`, { token });
   },
 
   // ── Applications ────────────────────────────────────────────────────────
+
+  /**
+   * Saves or creates a job application in the user's workspace without falsely marking it applied.
+   */
+  saveJobApplication: (
+    token: string,
+    jobId: string,
+    opts?: {
+      cover_letter?: string;
+      tailored_resume?: string;
+      status?: string;
+      workflow_status?: string;
+      mode?: string;
+    }
+  ): Promise<ApplicationItem> =>
+    request<ApplicationItem>("/applications/apply", {
+      token,
+      method: "POST",
+      body: JSON.stringify({
+        job_id: jobId,
+        status: opts?.status || "Found",
+        workflow_status: opts?.workflow_status || "discovered",
+        mode: opts?.mode || "automatic",
+        ...opts,
+      }),
+    }),
 
   /**
    * Creates or updates an application row for the authenticated user.
@@ -258,6 +307,20 @@ export const api = {
     request<ApplicationDetailItem>(`/applications/${id}/approve`, {
       token,
       method: "PATCH",
+    }),
+
+  /**
+   * Module 8 / P0: Confirms external manual submission on official job portal.
+   */
+  manualCompleteApplication: (
+    token: string,
+    id: string,
+    data?: { submission_reference?: string; notes?: string }
+  ): Promise<ApplicationDetailItem> =>
+    request<ApplicationDetailItem>(`/applications/${id}/manual-complete`, {
+      token,
+      method: "POST",
+      body: JSON.stringify(data || {}),
     }),
 
   /**

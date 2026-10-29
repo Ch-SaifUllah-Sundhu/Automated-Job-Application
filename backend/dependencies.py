@@ -35,6 +35,26 @@ def get_supabase_client(
     return client
 
 
+def get_supabase_admin_client() -> Client:
+    """
+    Returns an administrative Supabase client using SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_KEY.
+    Used strictly for trusted server-side background and administration tasks (account deletion, celery tasks).
+    Never exposed to client bundles or browser endpoints.
+    """
+    settings = get_settings()
+    import os
+    service_key = (
+        getattr(settings, "SUPABASE_SERVICE_ROLE_KEY", None)
+        or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or getattr(settings, "SUPABASE_SERVICE_KEY", None)
+        or os.environ.get("SUPABASE_SERVICE_KEY")
+    )
+    if not service_key:
+        log.warning("Neither SUPABASE_SERVICE_ROLE_KEY nor SUPABASE_SERVICE_KEY set; falling back to SUPABASE_KEY for server operations")
+        service_key = settings.SUPABASE_KEY
+    return create_client(settings.SUPABASE_URL, service_key)
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Security(security),
     supabase: Client = Depends(get_supabase_client),

@@ -102,6 +102,9 @@ export default function OnboardingPage() {
         await api.updateProfile(token, {
           full_name: fullName,
           phone,
+          target_role: targetTitle.trim() || undefined,
+          target_location: location.trim() || undefined,
+          experience_level: experienceLevel || undefined,
         });
         if (typeof window !== "undefined") {
           if (targetTitle) localStorage.setItem("jobpilot_target_title", targetTitle);
@@ -167,16 +170,16 @@ export default function OnboardingPage() {
     setLaunchingAgent(true);
     try {
       const token = await getAccessToken();
-      if (token) {
-        // Automatically crawl 10 portals for candidate's target role to populate dashboard
+      if (token && targetTitle.trim()) {
+        // Trigger initial search for candidate's actual specified target role & location
         await api.searchJobs(
           token,
-          targetTitle.trim() || "Python Developer",
-          location.trim() || "Remote"
+          targetTitle.trim(),
+          location.trim() || undefined
         );
       }
     } catch (crawlErr) {
-      console.warn("Initial background crawl notice:", crawlErr);
+      console.warn("Initial background search notice:", crawlErr);
     } finally {
       router.push("/dashboard");
     }
@@ -520,11 +523,11 @@ export default function OnboardingPage() {
                     {launchingAgent ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Crawling 10+ Portals for &ldquo;{targetTitle || "Python Developer"}&rdquo;…</span>
+                        <span>Initializing Workspace...</span>
                       </>
                     ) : (
                       <>
-                        <span>Launch Talent Dashboard</span>
+                        <span>Open Dashboard</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}

@@ -44,6 +44,10 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
   const [githubUrl, setGithubUrl] = useState("");
+  const [targetRole, setTargetRole] = useState("");
+  const [targetLocation, setTargetLocation] = useState("Remote");
+  const [experienceLevel, setExperienceLevel] = useState("Mid-Level");
+  const [jobType, setJobType] = useState("remote");
   const [resumeText, setResumeText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
@@ -65,6 +69,10 @@ export default function ProfilePage() {
       setPhone(data.phone || "");
       setLinkedinUrl(data.linkedin_url || "");
       setGithubUrl(data.github_url || "");
+      setTargetRole(data.target_role || "");
+      setTargetLocation(data.target_location || "Remote");
+      setExperienceLevel(data.experience_level || "Mid-Level");
+      setJobType(data.job_type || "remote");
       setResumeText(data.base_resume_text || "");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load candidate profile";
@@ -93,11 +101,15 @@ export default function ProfilePage() {
         phone: phone.trim(),
         linkedin_url: linkedinUrl.trim(),
         github_url: githubUrl.trim(),
+        target_role: targetRole.trim(),
+        target_location: targetLocation.trim(),
+        experience_level: experienceLevel,
+        job_type: jobType,
         base_resume_text: resumeText.trim(),
       });
 
       setProfile(updated);
-      showToast("Profile & resume text updated and re-indexed with Sentence-BERT!");
+      showToast("Profile, target preferences & resume re-indexed with Sentence-BERT!");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Save failed";
       showToast(msg, "error");
@@ -146,9 +158,14 @@ export default function ProfilePage() {
   };
 
   // Extracted skills preview
-  const extractedSkills = (resumeText.match(
-    /\b(Python|JavaScript|TypeScript|React|Next\.js|Node\.js|FastAPI|Django|Flask|Docker|Kubernetes|AWS|GCP|PostgreSQL|MySQL|MongoDB|Redis|GraphQL|REST|Git|CI\/CD|Linux|Java|Go|SQL|PyTorch|TensorFlow|Celery|Supabase)\b/gi
-  ) || []).filter((v, i, a) => a.findIndex((t) => t.toLowerCase() === v.toLowerCase()) === i);
+  const extractedSkills = (
+    resumeText.match(
+      new RegExp(
+        "\\b(Python|JavaScript|TypeScript|React|Next\\.js|Node\\.js|FastAPI|Django|Flask|Docker|Kubernetes|AWS|GCP|PostgreSQL|MySQL|MongoDB|Redis|GraphQL|REST|Git|CI/CD|Linux|Java|Go|SQL|PyTorch|TensorFlow|Celery|Supabase)\\b",
+        "gi"
+      )
+    ) || []
+  ).filter((v, i, a) => a.findIndex((t) => t.toLowerCase() === v.toLowerCase()) === i);
 
   if (authLoading || loading) {
     return (
@@ -162,11 +179,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#0B0F19] text-[#E2E8F0] flex font-sans selection:bg-[#2563EB]/30 selection:text-white">
+    <div className="w-full text-[#E2E8F0] p-6 lg:p-8 font-sans selection:bg-[#2563EB]/30 selection:text-white max-w-5xl mx-auto">
       {/* Toast Notification */}
       {toastMessage && (
         <div
-          className={`fixed top-5 right-5 z-50 p-3 rounded-lg border text-white text-xs shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 ${
+          className={`fixed top-5 right-5 z-50 p-3.5 rounded-lg border text-white text-xs shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 ${
             toastType === "error"
               ? "bg-[#1a0808] border-red-700"
               : "bg-[#111827] border-[#2563EB]"
@@ -181,228 +198,214 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* ── Left Sidebar ──────────────────────────────────────────────────── */}
-      <aside className="w-60 border-r border-[#1F2937] bg-[#0B0F19] flex flex-col justify-between shrink-0 hidden md:flex">
+      {/* ── Page Header ─────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#1F2937] mb-6">
         <div>
-          {/* Brand Logo */}
-          <div className="p-4 border-b border-[#1F2937] flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-xs tracking-wider">
-                JP
-              </div>
-              <div>
-                <span className="text-sm font-semibold tracking-tight text-white block leading-none">
-                  JobPilot
-                </span>
-                <span className="text-[10px] text-[#94A3B8]">Talent Operations</span>
-              </div>
-            </Link>
-          </div>
-
-          {/* Navigation Links */}
-          <nav className="p-3 space-y-1">
-            <Link
-              href="/dashboard"
-              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors"
-            >
-              <FolderKanban className="w-4 h-4 text-[#94A3B8]" />
-              <span>Job Pipeline</span>
-            </Link>
-
-            <Link
-              href="/dashboard/jobs"
-              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-medium text-[#94A3B8] hover:text-white hover:bg-[#111827] transition-colors"
-            >
-              <Compass className="w-4 h-4 text-[#94A3B8]" />
-              <span>Jobs &amp; Match Scoring</span>
-            </Link>
-
-            <Link
-              href="/dashboard/profile"
-              className="w-full flex items-center gap-2.5 px-3 h-9 rounded text-xs font-semibold bg-[#161F33] text-white border-l-2 border-[#2563EB]"
-            >
-              <FileText className="w-4 h-4 text-[#2563EB]" />
-              <span>Resume &amp; Profile</span>
-            </Link>
-          </nav>
+          <h1 className="text-xl font-bold text-white flex items-center gap-2.5">
+            <FileText className="w-5 h-5 text-[#38BDF8]" />
+            <span>Candidate Profile &amp; Preferences</span>
+          </h1>
+          <p className="text-xs text-[#94A3B8] mt-1">
+            Persist your resume, verified facts, and career search parameters for semantic AI matching and honest application drafts.
+          </p>
         </div>
 
-        {/* Sidebar Footer */}
-        <div className="p-3 border-t border-[#1F2937] bg-[#0B0F19]">
-          <div className="flex items-center justify-between pt-1">
-            <div className="flex items-center gap-2 truncate">
-              <div className="w-7 h-7 rounded bg-[#2563EB] flex items-center justify-center font-bold text-white text-[11px]">
-                {user?.email ? user.email.slice(0, 2).toUpperCase() : "JP"}
-              </div>
-              <div className="truncate">
-                <p className="text-[11px] font-medium text-white truncate">
-                  {fullName || user?.email?.split("@")[0] || "Candidate"}
-                </p>
-                <p className="text-[10px] text-[#64748B] truncate">{user?.email || ""}</p>
-              </div>
-            </div>
+        <button
+          onClick={handleSaveProfile}
+          disabled={saving}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-md shadow-[#2563EB]/25 transition-all cursor-pointer disabled:opacity-50"
+        >
+          {saving ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Saving Changes…</span>
+            </>
+          ) : (
+            <>
+              <Save className="w-3.5 h-3.5" />
+              <span>Save Profile</span>
+            </>
+          )}
+        </button>
+      </div>
 
-            <button
-              onClick={handleLogout}
-              disabled={loggingOut}
-              title="Sign Out"
-              className="p-1.5 rounded hover:bg-[#1F2937] text-[#94A3B8] hover:text-red-400 transition-colors cursor-pointer"
-            >
-              {loggingOut ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
-              ) : (
-                <LogOut className="w-3.5 h-3.5" />
-              )}
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── Main Profile Workspace ────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        {/* Top Header */}
-        <header className="h-16 border-b border-[#1F2937] bg-[#0B0F19]/90 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-[#2563EB]/10 border border-[#2563EB]/30 flex items-center justify-center text-[#60A5FA]">
-              <FileText className="w-4 h-4" />
-            </div>
+      <div className="space-y-6">
+        {/* Quick Stats Ribbon */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937] flex items-center justify-between">
             <div>
-              <h1 className="text-sm font-semibold text-white">Candidate Profile &amp; Resume Intelligence</h1>
-              <p className="text-[11px] text-[#94A3B8]">
-                Sentence-BERT embeddings synced to Supabase PostgreSQL pgvector
-              </p>
+              <span className="text-[11px] text-[#94A3B8] block">Parsed Skills Detected</span>
+              <span className="text-xl font-bold text-white mt-0.5 block">{extractedSkills.length}</span>
+              <span className="text-[10px] text-emerald-400 font-medium">Automatic Regex &amp; Alias</span>
+            </div>
+            <div className="w-9 h-9 rounded bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Sparkles className="w-4 h-4" />
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSaveProfile}
-              disabled={saving}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold shadow-md shadow-[#2563EB]/25 transition-all cursor-pointer disabled:opacity-50"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Saving Changes…</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Save Changes</span>
-                </>
-              )}
-            </button>
-          </div>
-        </header>
-
-        {/* Content Body */}
-        <div className="p-6 max-w-5xl w-full mx-auto space-y-6">
-          {/* Quick Stats Ribbon */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-            <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937] flex items-center justify-between">
-              <div>
-                <span className="text-[11px] text-[#94A3B8] block">Parsed Skills Detected</span>
-                <span className="text-xl font-bold text-white mt-0.5 block">{extractedSkills.length}</span>
-                <span className="text-[10px] text-emerald-400 font-medium">Automatic Regex &amp; Alias</span>
-              </div>
-              <div className="w-9 h-9 rounded bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                <Sparkles className="w-4 h-4" />
-              </div>
+          <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937] flex items-center justify-between">
+            <div>
+              <span className="text-[11px] text-[#94A3B8] block">Vector Embedding</span>
+              <span className="text-xl font-bold text-white mt-0.5 block">384-Dim</span>
+              <span className="text-[10px] text-blue-400 font-medium">all-MiniLM-L6-v2 SBERT</span>
             </div>
-
-            <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937] flex items-center justify-between">
-              <div>
-                <span className="text-[11px] text-[#94A3B8] block">Vector Embedding</span>
-                <span className="text-xl font-bold text-white mt-0.5 block">384-Dim</span>
-                <span className="text-[10px] text-blue-400 font-medium">all-MiniLM-L6-v2 SBERT</span>
-              </div>
-              <div className="w-9 h-9 rounded bg-[#2563EB]/15 border border-[#2563EB]/30 flex items-center justify-center text-[#2563EB]">
-                <Layers className="w-4 h-4" />
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937] flex items-center justify-between">
-              <div>
-                <span className="text-[11px] text-[#94A3B8] block">Resume Characters</span>
-                <span className="text-xl font-bold text-white mt-0.5 block">{resumeText.length}</span>
-                <span className="text-[10px] text-[#94A3B8] font-medium">Chunked by Paragraphs</span>
-              </div>
-              <div className="w-9 h-9 rounded bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                <Shield className="w-4 h-4" />
-              </div>
+            <div className="w-9 h-9 rounded bg-[#2563EB]/15 border border-[#2563EB]/30 flex items-center justify-center text-[#2563EB]">
+              <Layers className="w-4 h-4" />
             </div>
           </div>
 
-          <form onSubmit={handleSaveProfile} className="space-y-6">
-            {/* 1. Contact & Social Profiles */}
-            <div className="p-5 rounded-2xl bg-[#0E131F] border border-[#1F2937] space-y-4">
-              <div className="flex items-center gap-2 pb-3 border-b border-[#1F2937]">
-                <User className="w-4 h-4 text-[#2563EB]" />
-                <h2 className="text-xs font-semibold text-white uppercase tracking-wider">
-                  Contact &amp; Identification Details
-                </h2>
+          <div className="p-4 rounded-xl bg-[#111827] border border-[#1F2937] flex items-center justify-between">
+            <div>
+              <span className="text-[11px] text-[#94A3B8] block">Resume Characters</span>
+              <span className="text-xl font-bold text-white mt-0.5 block">{resumeText.length}</span>
+              <span className="text-[10px] text-[#94A3B8] font-medium">Chunked by Paragraphs</span>
+            </div>
+            <div className="w-9 h-9 rounded bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+              <Shield className="w-4 h-4" />
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveProfile} className="space-y-6">
+          {/* 1. Contact & Social Profiles */}
+          <div className="p-5 rounded-2xl bg-[#0E131F] border border-[#1F2937] space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-[#1F2937]">
+              <User className="w-4 h-4 text-[#2563EB]" />
+              <h2 className="text-xs font-semibold text-white uppercase tracking-wider">
+                Contact &amp; Identification Details
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] font-medium text-[#94A3B8] block mb-1">
+                  Full Legal Name
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. CH Saifullah Sundhu"
+                  className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#64748B]"
+                />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[11px] font-medium text-[#94A3B8] block mb-1">
-                    Full Legal Name
-                  </label>
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. CH Saifullah Sundhu"
-                    className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#64748B]"
-                  />
-                </div>
+              <div>
+                <label className="text-[11px] font-medium text-[#94A3B8] block mb-1">
+                  Phone Number
+                </label>
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. +92 306 9727242"
+                  className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#64748B]"
+                />
+              </div>
 
-                <div>
-                  <label className="text-[11px] font-medium text-[#94A3B8] block mb-1">
-                    Phone Number
-                  </label>
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="e.g. +92 306 9727242"
-                    className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#64748B]"
-                  />
-                </div>
+              <div>
+                <label className="text-[11px] font-medium text-[#94A3B8] block mb-1 flex items-center gap-1.5">
+                  <svg className="w-3 h-3 fill-current text-[#0A66C2]" viewBox="0 0 24 24">
+                    <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.2a1.66 1.66 0 1 0 0 3.32 1.66 1.66 0 0 0 0-3.32Z" />
+                  </svg>
+                  <span>LinkedIn Profile URL</span>
+                </label>
+                <input
+                  type="url"
+                  value={linkedinUrl}
+                  onChange={(e) => setLinkedinUrl(e.target.value)}
+                  placeholder="https://linkedin.com/in/username"
+                  className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#64748B]"
+                />
+              </div>
 
-                <div>
-                  <label className="text-[11px] font-medium text-[#94A3B8] block mb-1 flex items-center gap-1.5">
-                    <svg className="w-3 h-3 fill-current text-[#0A66C2]" viewBox="0 0 24 24">
-                      <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 10.9v8.37H9.2V10.9H6.46M7.83 6.2a1.66 1.66 0 1 0 0 3.32 1.66 1.66 0 0 0 0-3.32Z" />
-                    </svg>
-                    <span>LinkedIn Profile URL</span>
-                  </label>
-                  <input
-                    type="url"
-                    value={linkedinUrl}
-                    onChange={(e) => setLinkedinUrl(e.target.value)}
-                    placeholder="https://linkedin.com/in/username"
-                    className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#64748B]"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-medium text-[#94A3B8] block mb-1 flex items-center gap-1.5">
-                    <svg className="w-3 h-3 fill-current text-white" viewBox="0 0 24 24">
-                      <path d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2Z" />
-                    </svg>
-                    <span>GitHub Profile URL</span>
-                  </label>
-                  <input
-                    type="url"
-                    value={githubUrl}
-                    onChange={(e) => setGithubUrl(e.target.value)}
-                    placeholder="https://github.com/username"
-                    className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#64748B]"
-                  />
-                </div>
+              <div>
+                <label className="text-[11px] font-medium text-[#94A3B8] block mb-1 flex items-center gap-1.5">
+                  <svg className="w-3 h-3 fill-current text-white" viewBox="0 0 24 24">
+                    <path d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2Z" />
+                  </svg>
+                  <span>GitHub Profile URL</span>
+                </label>
+                <input
+                  type="url"
+                  value={githubUrl}
+                  onChange={(e) => setGithubUrl(e.target.value)}
+                  placeholder="https://github.com/username"
+                  className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#64748B]"
+                />
               </div>
             </div>
+          </div>
+
+          {/* 2. Target Career & Location Preferences */}
+          <div className="p-5 rounded-2xl bg-[#0E131F] border border-[#1F2937] space-y-4">
+            <div className="flex items-center gap-2 pb-3 border-b border-[#1F2937]">
+              <Briefcase className="w-4 h-4 text-[#38BDF8]" />
+              <h2 className="text-xs font-semibold text-white uppercase tracking-wider">
+                Target Role &amp; Search Preferences
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] font-medium text-[#94A3B8] block mb-1">
+                  Primary Target Role
+                </label>
+                <input
+                  type="text"
+                  value={targetRole}
+                  onChange={(e) => setTargetRole(e.target.value)}
+                  placeholder="e.g. Senior Backend Engineer"
+                  className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#64748B]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#94A3B8] block mb-1">
+                  Target Location / Preference
+                </label>
+                <input
+                  type="text"
+                  value={targetLocation}
+                  onChange={(e) => setTargetLocation(e.target.value)}
+                  placeholder="e.g. Remote, San Francisco, CA"
+                  className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white placeholder-[#64748B]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#94A3B8] block mb-1">
+                  Experience Level
+                </label>
+                <select
+                  value={experienceLevel}
+                  onChange={(e) => setExperienceLevel(e.target.value)}
+                  className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white"
+                >
+                  <option value="Entry-Level">Entry-Level (0-2 years)</option>
+                  <option value="Mid-Level">Mid-Level (3-5 years)</option>
+                  <option value="Senior">Senior (5+ years)</option>
+                  <option value="Staff / Principal">Staff / Principal (8+ years)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-medium text-[#94A3B8] block mb-1">
+                  Workplace Arrangement
+                </label>
+                <select
+                  value={jobType}
+                  onChange={(e) => setJobType(e.target.value)}
+                  className="w-full bg-[#111827] border border-[#1F2937] focus:border-[#2563EB] focus:outline-none rounded-lg px-3.5 py-2 text-xs text-white"
+                >
+                  <option value="remote">Remote Only</option>
+                  <option value="hybrid">Hybrid</option>
+                  <option value="onsite">On-site</option>
+                  <option value="any">Any / Flexible</option>
+                </select>
+              </div>
+            </div>
+          </div>
 
             {/* 2. Resume Text & File Upload */}
             <div className="p-5 rounded-2xl bg-[#0E131F] border border-[#1F2937] space-y-4">
@@ -496,7 +499,6 @@ export default function ProfilePage() {
             </div>
           </form>
         </div>
-      </main>
-    </div>
+      </div>
   );
 }

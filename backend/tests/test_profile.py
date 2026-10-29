@@ -94,6 +94,43 @@ def test_update_profile_success():
         app.dependency_overrides.clear()
 
 
+def test_update_profile_preferences():
+    """Module 8 / P0 audit: target_role, location, and experience preferences persist."""
+    mock_user = {"id": "user-789", "email": "engineer@example.com"}
+    mock_sb = MagicMock()
+    mock_sb.table.return_value.upsert.return_value.execute.return_value.data = [
+        {
+            "id": "user-789",
+            "full_name": "Jane Smith",
+            "target_role": "Staff Backend Engineer",
+            "target_location": "San Francisco, CA",
+            "experience_level": "Senior",
+            "job_type": "remote",
+            "skills": ["Python", "PostgreSQL", "Docker"],
+        }
+    ]
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    app.dependency_overrides[get_supabase_client] = lambda: mock_sb
+    try:
+        payload = {
+            "target_role": "Staff Backend Engineer",
+            "target_location": "San Francisco, CA",
+            "experience_level": "Senior",
+            "job_type": "remote",
+            "skills": ["Python", "PostgreSQL", "Docker"],
+        }
+        resp = client.put("/profile", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["target_role"] == "Staff Backend Engineer"
+        assert data["target_location"] == "San Francisco, CA"
+        assert data["job_type"] == "remote"
+        assert "Python" in data["skills"]
+    finally:
+        app.dependency_overrides.clear()
+
+
 def test_resume_parser_docx():
     """Verify DOCX parsing generates clean text."""
     doc = Document()

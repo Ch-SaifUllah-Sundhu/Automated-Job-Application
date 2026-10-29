@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # Supabase credentials
     SUPABASE_URL: str = Field(..., description="Supabase project URL")
     SUPABASE_KEY: str = Field(..., description="Supabase anon public key")
+    SUPABASE_SERVICE_ROLE_KEY: Optional[str] = Field(None, description="Supabase service role secret key (backend only)")
+    SUPABASE_SERVICE_KEY: Optional[str] = Field(None, description="Supabase service key alias")
 
     # Groq API
     GROQ_API_KEY: str = Field(..., description="Groq API key for Llama 3")

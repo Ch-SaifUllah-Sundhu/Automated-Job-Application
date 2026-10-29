@@ -48,6 +48,14 @@ export default function LoginPage() {
 
     try {
       await signIn(email, password);
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const nextUrl = params.get("next");
+        if (nextUrl && nextUrl.startsWith("/") && !nextUrl.startsWith("//")) {
+          router.push(nextUrl);
+          return;
+        }
+      }
       router.push("/dashboard");
     } catch (err: unknown) {
       if (err instanceof Error) {

@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS profiles (
     linkedin_url     TEXT,
     github_url       TEXT,
     base_resume_text TEXT,
+    target_role      TEXT,
+    target_location  TEXT,
+    experience_level TEXT,
+    job_type         TEXT,
+    preferences      JSONB DEFAULT '{}'::jsonb,
+    skills           JSONB DEFAULT '[]'::jsonb,
     embedding        vector(384), -- Sentence-BERT all-MiniLM-L6-v2 384-dim dense embedding
     created_at       TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -30,6 +36,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     title           TEXT NOT NULL,
     company         TEXT NOT NULL,
     url             TEXT UNIQUE NOT NULL,
+    location        TEXT DEFAULT 'Remote',
     description     TEXT,
     required_skills TEXT,
     source          TEXT,
@@ -44,19 +51,30 @@ CREATE TABLE IF NOT EXISTS applications (
     job_id               UUID REFERENCES jobs(id) ON DELETE CASCADE,
     status               TEXT DEFAULT 'Found',
     -- status values: 'Found' | 'Applied' | 'Interview' | 'Offer' | 'Rejected' | 'Manual Required'
-    tailored_resume_text TEXT,
-    cover_letter_text    TEXT,
+    workflow_status      TEXT DEFAULT 'discovered',
+    -- workflow_status: 'discovered' | 'drafting' | 'awaiting_review' | 'awaiting_approval' | 'queued' | 'submitting' | 'manual_required' | 'submission_failed' | 'submitted'
+    cover_letter         TEXT,
+    tailored_resume      TEXT,
+    cover_letter_text    TEXT, -- legacy column kept for backwards compatibility
+    tailored_resume_text TEXT, -- legacy column kept for backwards compatibility
+    draft_version        INTEGER DEFAULT 1,
+    mode                 TEXT DEFAULT 'automatic', -- 'automatic' | 'manual'
+    submission_mode      TEXT, -- 'automation_verified' | 'manual_confirmed'
+    submission_reference TEXT,
+    failure_reason       TEXT,
+    last_submitted_at    TIMESTAMPTZ,
     applied_at           TIMESTAMPTZ,
     created_at           TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     -- Added in Module 7/8:
     match_score          NUMERIC(5,2),
     -- Sentence-BERT + pgvector cosine similarity score (0.00-100.00)
-    missing_skills       JSONB,
+    missing_skills       JSONB DEFAULT '[]'::jsonb,
     -- e.g. ["Docker", "Kubernetes"] — skill gaps identified via embedding similarity
-    missing_fields       JSONB,
+    missing_fields       JSONB DEFAULT '[]'::jsonb,
     -- form input fields missing for Module 8 Human-in-Loop modal
-    review_status        TEXT DEFAULT 'pending'
-    -- review_status: 'pending' | 'approved' | 'rejected'
+    review_status        TEXT DEFAULT 'pending',
+    -- review_status: 'pending' | 'approved' | 'rejected' | 'changes_requested'
+    CONSTRAINT applications_user_id_job_id_key UNIQUE (user_id, job_id)
 );
 
 -- =============================================================================
@@ -188,12 +206,14 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE INDEX IF NOT EXISTS idx_jobs_embedding 
     ON jobs USING hnsw (embedding vector_cosine_ops);
 
--- Migration commands for existing deployments:
--- ALTER TABLE profiles ADD COLUMN IF NOT EXISTS embedding vector(384);
--- ALTER TABLE jobs ADD COLUMN IF NOT EXISTS embedding vector(384);
--- ALTER TABLE applications ADD COLUMN IF NOT EXISTS match_score NUMERIC(5,2);
--- ALTER TABLE applications ADD COLUMN IF NOT EXISTS missing_skills JSONB;
--- CREATE INDEX IF NOT EXISTS idx_jobs_embedding ON jobs USING hnsw (embedding vector_cosine_ops);
+-- Additional performance indexes
+CREATE INDEX IF NOT EXISTS idx_jobs_location ON jobs (location);
+CREATE INDEX IF NOT EXISTS idx_applications_user_job ON applications (user_id, job_id);
+CREATE INDEX IF NOT EXISTS idx_applications_workflow_status ON applications (workflow_status);
+CREATE INDEX IF NOT EXISTS idx_applications_status ON applications (status);
+
+-- Complete incremental migrations are stored in:
+-- backend/migrations/001_reconcile_schema.sql
 
 -- =============================================================================
 -- SUPABASE STORAGE BUCKETS (create in Dashboard → Storage)
